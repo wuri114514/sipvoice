@@ -1,5 +1,9 @@
 # SIPVoice · 轻量 SIP 语音 AI 网关
 
+![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go&logoColor=white)
+![Platform](https://img.shields.io/badge/platform-linux%2Famd64%20%7C%20linux%2Farm64-lightgrey)
+![License](https://img.shields.io/badge/license-MIT-green)
+
 把一通普通的电话，变成能对话的 AI 助手：**话机/网关 → Asterisk → voicebridge → 任意大模型**。
 无公网、无云控制台、一条命令装完，跑在一台 2 核小机器上。
 
