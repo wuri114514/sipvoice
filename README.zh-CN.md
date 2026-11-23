@@ -115,6 +115,29 @@ sudo bash install.sh
 }
 ```
 
+### 修改控制台端口（手动）
+
+控制台默认监听 `0.0.0.0:8080`，这个值来自 systemd 单元里的 `-web` 参数，**面板里暂时没有对应输入框**。
+用 drop-in 覆盖即可（重新运行 `install.sh` 不会覆盖它，因为脚本只重写主单元文件）：
+
+```bash
+sudo mkdir -p /etc/systemd/system/sipvoice.service.d
+sudo tee /etc/systemd/system/sipvoice.service.d/web-port.conf >/dev/null <<'EOF'
+[Service]
+ExecStart=
+ExecStart=/opt/sipvoice/voicebridge -mode agent -config /etc/sipvoice/config.json -web 0.0.0.0:9080
+EOF
+sudo systemctl daemon-reload
+sudo systemctl restart sipvoice
+```
+
+注意：
+
+- 只改变控制台端口；SIP（`5060/udp`）与 AudioSocket（`127.0.0.1:9092`）不受影响
+- 证书绑定的是主机名而不是端口，不需要重新生成
+- 如果你原本为 8080 开了防火墙，记得同步放行新端口
+- 想改回默认值：删掉该 drop-in 文件后 `systemctl daemon-reload && systemctl restart sipvoice`
+
 ## 运维
 
 ```bash

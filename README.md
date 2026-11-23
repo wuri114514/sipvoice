@@ -106,7 +106,6 @@ without a restart.
 - **DTMF**: `0` interrupts playback, `9` hangs up (both configurable)
 
 A minimal config file looks like this:
-
 ```json
 {
   "audio": { "listen": "127.0.0.1:9092" },
@@ -121,6 +120,29 @@ A minimal config file looks like this:
   "agent": { "greeting": "Hello, how can I help you?" }
 }
 ```
+
+### Changing the console port (manual)
+
+The console listens on `0.0.0.0:8080`, set by the `-web` flag in the systemd unit. There is no field
+for it in the console yet. Override it with a drop-in (this survives `install.sh`, which only
+rewrites the main unit file):
+
+```bash
+sudo mkdir -p /etc/systemd/system/sipvoice.service.d
+sudo tee /etc/systemd/system/sipvoice.service.d/web-port.conf >/dev/null <<'EOF'
+[Service]
+ExecStart=
+ExecStart=/opt/sipvoice/voicebridge -mode agent -config /etc/sipvoice/config.json -web 0.0.0.0:9080
+EOF
+sudo systemctl daemon-reload
+sudo systemctl restart sipvoice
+```
+
+Notes:
+
+- only the console port changes; SIP (`5060/udp`) and AudioSocket (`127.0.0.1:9092`) are unaffected
+- the TLS certificate is bound to the host name, not the port — no need to regenerate it
+- open the new port in your firewall if you had one for 8080
 
 ## Operations
 
