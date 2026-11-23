@@ -1,0 +1,47 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: 构建并发布
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: 单元测试
+        run: go test ./...
+
+      - name: 构建两个架构并打发布包
+        run: make release
+
+      - name: 校验产物
+        run: ls -lh dist/release/
+
+      - name: 创建 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/release/*.tar.gz
+            dist/release/*.sha256
+          generate_release_notes: true
+          body: |
+            ## 安装
+
+            ```bash
+            tar -xzf sipvoice-${{ github.ref_name }}-linux-amd64.tar.gz
+            cd sipvoice-*
+            sudo bash install.sh
+            ```
+
+            支持 `linux/amd64` 与 `linux/arm64`（树莓派 4/5、ARM 服务器可直接用）。
+            需要 Ubuntu 22.04+ / Debian 12+，安装脚本会自动装 Asterisk 与 ffmpeg。

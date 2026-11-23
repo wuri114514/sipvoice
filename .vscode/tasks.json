@@ -1,0 +1,53 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build-linux",
+      "type": "shell",
+      "command": "go",
+      "args": ["build", "-trimpath", "-ldflags", "-s -w", "-o", "dist/voicebridge-linux-amd64", "./cmd/voicebridge"],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": { "GOOS": "linux", "GOARCH": "amd64", "CGO_ENABLED": "0", "GOPROXY": "https://goproxy.cn,direct" }
+      },
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": ["$go"]
+    },
+    {
+      "label": "build-windows",
+      "type": "shell",
+      "command": "go",
+      "args": ["build", "-trimpath", "-o", "dist/voicebridge-windows-amd64.exe", "./cmd/voicebridge"],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": { "GOOS": "windows", "GOARCH": "amd64", "CGO_ENABLED": "0", "GOPROXY": "https://goproxy.cn,direct" }
+      },
+      "problemMatcher": ["$go"]
+    },
+    {
+      "label": "test",
+      "type": "shell",
+      "command": "go",
+      "args": ["test", "./..."],
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "test",
+      "problemMatcher": ["$go"]
+    },
+    {
+      "label": "vet",
+      "type": "shell",
+      "command": "go",
+      "args": ["vet", "./..."],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": ["$go"]
+    },
+    {
+      "label": "run server (local)",
+      "type": "shell",
+      "command": "go",
+      "args": ["run", "./cmd/voicebridge", "-mode", "server", "-listen", ":5060"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    }
+  ]
+}

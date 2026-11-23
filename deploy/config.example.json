@@ -1,0 +1,29 @@
+{
+  "audio": { "listen": "127.0.0.1:9092" },
+  "ai": {
+    "base_url": "https://api.deepseek.com",
+    "api_key": "",
+    "chat_model": "deepseek-chat",
+    "asr_model": "",
+    "tts_model": "",
+    "voice": "",
+    "system_prompt": "你是一名电话语音助手。请始终使用简体中文回答，简短、口语化，控制在两句话内，不要使用 Markdown 或列表。",
+    "temperature": 0.7,
+    "asr_backend": "whisper-cli",
+    "asr_cmd": "/usr/bin/whisper-cli",
+    "asr_model_path": "/opt/sipvoice/models/ggml-tiny.bin",
+    "asr_lang": "zh",
+    "tts_backend": "edge-tts",
+    "tts_cmd": "/opt/edge-tts/bin/edge-tts",
+    "tts_voice": "zh-CN-XiaoxiaoNeural",
+    "tts_rate": "+0%"
+  },
+  "agent": {
+    "greeting": "您好，请问有什么可以帮您？",
+    "max_utterance_seconds": 15,
+    "silence_ms": 700,
+    "min_speech_ms": 200,
+    "energy_threshold": 700,
+    "barge_in": true
+  }
+}

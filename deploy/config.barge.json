@@ -1,0 +1,21 @@
+{
+  "audio": { "listen": "127.0.0.1:9092" },
+  "ai": {
+    "base_url": "http://127.0.0.1:8090/v1",
+    "api_key": "",
+    "chat_model": "gpt-4o-mini",
+    "asr_model": "whisper-1",
+    "tts_model": "tts-1",
+    "voice": "alloy",
+    "system_prompt": "你是一名电话客服，回答要简短口语化。",
+    "temperature": 0.7
+  },
+  "agent": {
+    "greeting": "您好，请问有什么可以帮您？",
+    "max_utterance_seconds": 15,
+    "silence_ms": 700,
+    "min_speech_ms": 200,
+    "energy_threshold": 700,
+    "barge_in": true
+  }
+}

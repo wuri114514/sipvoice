@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SIPVoice 控制台</title>
+<style>
+  :root{--bg:#0f1115;--panel:#171a21;--line:#262b36;--text:#e6e8ee;--muted:#8b93a7;--accent:#3b82f6;--ok:#22c55e;--bad:#ef4444;--warn:#f59e0b}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+  header{display:flex;align-items:center;gap:12px;padding:14px 22px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
+  header h1{font-size:16px;margin:0;font-weight:600}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:#20242e;color:var(--muted);font-size:12px}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--bad)}
+  .dot.on{background:var(--ok)}
+  nav{display:flex;gap:6px;padding:10px 22px;border-bottom:1px solid var(--line);background:#12151c}
+  nav button{background:transparent;border:0;color:var(--muted);padding:8px 14px;border-radius:8px;cursor:pointer;font:inherit}
+  nav button.active{background:#1f2530;color:var(--text)}
+  main{padding:18px 22px}
+  section{display:none}
+  section.show{display:block}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .card b{display:block;font-size:22px;font-weight:600;margin-top:2px}
+  .card span{font-size:12px;color:var(--muted)}
+  .bar{height:6px;background:#0d1016;border-radius:4px;margin-top:8px;overflow:hidden}
+  .bar i{display:block;height:100%;background:linear-gradient(90deg,#22c55e,#f59e0b,#ef4444);width:0%}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+  .panel h2{margin:0 0 12px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+  .field.wide{grid-column:1/-1}
+  label{font-size:12px;color:var(--muted)}
+  input,select,textarea{background:#0f1218;border:1px solid var(--line);color:var(--text);border-radius:8px;padding:8px 10px;font:inherit;outline:none}
+  input:focus,textarea:focus,select:focus{border-color:var(--accent)}
+  textarea{resize:vertical;min-height:70px}
+  button.primary{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:9px 16px;font:inherit;cursor:pointer}
+  button.ghost{background:#232833;color:var(--text);border:0;border-radius:8px;padding:7px 12px;font:inherit;cursor:pointer}
+  button.small{padding:4px 10px;font-size:12px;border-radius:6px;border:0;cursor:pointer;background:#232833;color:var(--text)}
+  button.danger{background:#3a1d1d;color:#fca5a5}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px}
+  .inline{display:flex;gap:6px;align-items:center}
+  .inline input{flex:1;min-width:0}
+  table{width:100%;border-collapse:collapse}
+  th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);font-size:13px}
+  th{color:var(--muted);font-weight:500;font-size:12px}
+  .tag{font-size:11px;padding:1px 8px;border-radius:999px;background:#1f2937;color:var(--muted)}
+  .tag.ok{background:#052e16;color:#4ade80}
+  .tag.busy{background:#3b2f0b;color:#fbbf24}
+  .msg{font-size:13px;color:var(--muted);min-height:20px;margin-top:8px}
+  .call{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:#12151c}
+  .call .top{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted)}
+  .call .turn{margin-top:6px;font-size:13px}
+  .you{color:#93c5fd}.bot{color:#a7f3d0}
+  progress{width:120px;height:8px}
+  #auth{position:fixed;inset:0;background:rgba(10,12,16,.97);display:none;align-items:center;justify-content:center;z-index:99}
+  #auth.show{display:flex}
+  .auth-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:26px;width:340px}
+  .auth-card h2{margin:0 0 4px;font-size:18px}
+  .auth-card p{color:var(--muted);font-size:13px;margin:0 0 16px}
+  .auth-card input{width:100%;margin-bottom:10px}
+  .auth-card button{width:100%}
+  .auth-err{color:var(--bad);font-size:13px;min-height:18px;margin-top:6px}
+  @media(max-width:800px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>SIPVoice</h1>
+  <span class="pill"><i class="dot" id="dot-ast"></i>Asterisk</span>
+  <span class="pill" id="pill-ver">--</span>
+  <span class="pill" id="pill-uptime">--</span>
+  <span class="pill" id="pill-ai">AI --</span>
+  <span style="margin-left:auto" class="pill" id="pill-host">--</span>
+  <button class="small" id="btn-logout" style="display:none">退出</button>
+</header>
+
+<div id="auth"><div class="auth-card">
+  <h2 id="auth-title">登录</h2>
+  <p id="auth-desc"></p>
+  <input id="auth-user" placeholder="用户名" autocomplete="username">
+  <input id="auth-pass" type="password" placeholder="密码" autocomplete="current-password">
+  <input id="auth-pass2" type="password" placeholder="确认密码" style="display:none">
+  <button class="primary" id="auth-submit">登录</button>
+  <div class="auth-err" id="auth-err"></div>
+</div></div>
+
+<nav>
+  <button class="active" data-tab="overview">概览</button>
+  <button data-tab="models">模型</button>
+  <button data-tab="ai">AI 服务</button>
+  <button data-tab="voice">语音</button>
+  <button data-tab="phones">话机</button>
+  <button data-tab="system">系统</button>
+</nav>
+
+<main>
+  <!-- 概览 -->
+  <section id="tab-overview" class="show">
+    <div class="cards">
+      <div class="card"><span>CPU 使用率</span><b id="p-cpu">--</b><div class="bar"><i id="b-cpu"></i></div></div>
+      <div class="card"><span>内存</span><b id="p-mem">--</b><div class="bar"><i id="b-mem"></i></div></div>
+      <div class="card"><span>磁盘</span><b id="p-disk">--</b><div class="bar"><i id="b-disk"></i></div></div>
+      <div class="card"><span>负载 (1/5/15)</span><b id="p-load">--</b><span id="p-cores"></span></div>
+      <div class="card"><span>温度</span><b id="p-temp">--</b></div>
+      <div class="card"><span>网络 收/发</span><b id="p-net">--</b></div>
+      <div class="card"><span>当前通话</span><b id="p-active">0</b></div>
+      <div class="card"><span>已记录通话</span><b id="p-total">0</b></div>
+    </div>
+    <div class="panel">
+      <h2>进程占用</h2>
+      <table><thead><tr><th>进程</th><th>PID</th><th>内存</th><th>CPU</th></tr></thead><tbody id="proc-body"></tbody></table>
+    </div>
+    <div class="panel">
+      <h2>最近通话</h2>
+      <div id="calls"><div class="msg">暂无通话记录</div></div>
+    </div>
+  </section>
+
+  <!-- 模型 -->
+  <section id="tab-models">
+    <div class="panel">
+      <h2>本地语音识别模型</h2>
+      <div class="msg" id="model-dir"></div>
+      <table><thead><tr><th>模型</th><th>大小</th><th>状态</th><th>操作</th></tr></thead><tbody id="model-body"></tbody></table>
+      <div class="row">
+        <input type="file" id="upload" accept=".bin">
+        <button class="ghost" id="btn-upload">上传模型</button>
+        <span class="msg" id="upload-msg"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- AI -->
+  <section id="tab-ai">
+    <div class="panel">
+      <h2>服务商预设</h2>
+      <div class="grid">
+        <div class="field"><label>对话服务商</label><select id="provider"></select></div>
+        <div class="field"><label>说明</label><div class="msg" id="provider-note" style="margin-top:2px"></div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>对话模型（OpenAI 兼容）</h2>
+      <div class="grid">
+        <div class="field wide"><label>Base URL</label><input id="chat_base" placeholder="https://api.deepseek.com/v1"></div>
+        <div class="field"><label>API Key（*** 表示不修改）</label><input id="chat_key" type="password"></div>
+        <div class="field"><label>模型（可直接输入，或拉取后选择）</label>
+          <div class="inline"><input id="chat_model" list="dl-chat"><button class="small" id="fetch-chat">拉取列表</button></div>
+        </div>
+        <div class="field wide"><label>系统提示词（可改模板）</label><textarea id="system_prompt"></textarea></div>
+        <div class="field"><label>开场白</label><input id="greeting"></div>
+        <div class="field"><label>温度</label><input id="temperature" type="number" step="0.1"></div>
+      </div>
+      <div class="row">
+        <button class="primary" id="save-ai">保存</button>
+        <button class="ghost" id="test-ai">测试对话</button>
+        <span class="msg" id="ai-msg"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 语音 -->
+  <section id="tab-voice">
+    <div class="panel">
+      <h2>语音识别（ASR）</h2>
+      <div class="grid">
+        <div class="field"><label>后端</label>
+          <select id="asr_backend">
+            <option value="whisper-cli">本地 whisper.cpp</option>
+            <option value="siliconflow">硅基流动（云端 SenseVoice）</option>
+            <option value="openai">OpenAI 兼容</option>
+            <option value="off">关闭</option>
+          </select>
+        </div>
+        <div class="field"><label>服务商预设</label><select id="asr_provider"></select></div>
+        <div class="field"><label>云端 ASR Key（*** 不修改）</label><input id="asr_key" type="password"></div>
+        <div class="field"><label>云端 ASR Base URL</label><input id="asr_base" placeholder="https://api.siliconflow.cn/v1"></div>
+        <div class="field"><label>云端 ASR 模型</label>
+          <div class="inline"><input id="asr_model_cloud" list="dl-asr" placeholder="FunAudioLLM/SenseVoiceSmall"><button class="small" id="fetch-asr">拉取列表</button></div>
+        </div>
+        <div class="field"><label>本地模型</label><select id="asr_model_sel"></select></div>
+        <div class="field wide"><label>模型路径</label><input id="asr_model_path"></div>
+        <div class="field"><label>语言</label><input id="asr_lang" placeholder="zh"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>语音合成（TTS）</h2>
+      <div class="grid">
+        <div class="field"><label>后端</label>
+          <select id="tts_backend">
+            <option value="siliconflow">硅基流动 CosyVoice2</option>
+            <option value="edge-tts">Edge TTS（在线）</option>
+            <option value="openai">OpenAI 兼容</option>
+            <option value="off">关闭</option>
+          </select>
+        </div>
+        <div class="field"><label>服务商预设</label><select id="tts_provider"></select></div>
+        <div class="field"><label>音色</label>
+          <div class="inline"><input id="tts_voice" list="dl-voice"><button class="small" id="fetch-voice">载入音色</button></div>
+        </div>
+        <div class="field"><label>云端 TTS Key（*** 不修改）</label><input id="tts_key" type="password"></div>
+        <div class="field"><label>云端 TTS Base URL</label><input id="tts_base" placeholder="https://api.siliconflow.cn/v1"></div>
+        <div class="field"><label>云端 TTS 模型</label>
+          <div class="inline"><input id="tts_model_cloud" list="dl-tts" placeholder="FunAudioLLM/CosyVoice2-0.5B"><button class="small" id="fetch-tts">拉取列表</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>端到端语音（实验：直接音频进、音频出）</h2>
+      <div class="grid">
+        <div class="field"><label>启用</label>
+          <select id="rt_enabled"><option value="false">关闭（走 ASR→对话→TTS）</option><option value="true">开启（Qwen-Omni 等）</option></select>
+        </div>
+        <div class="field"><label>模型</label>
+          <div class="inline"><input id="rt_model" list="dl-omni"><button class="small" id="rt-fetch">载入候选</button></div>
+        </div>
+        <div class="field"><label>音色</label><input id="rt_voice" list="dl-voice2"></div>
+        <div class="field"><label>API Key（*** 不修改）</label><input id="rt_key" type="password"></div>
+        <div class="field wide"><label>WebSocket 地址</label><input id="rt_base" placeholder="wss://dashscope.aliyuncs.com/api-ws/v1/realtime"></div>
+        <div class="field wide"><label>人设 / 指令</label><textarea id="rt_instructions"></textarea></div>
+      </div>
+      <div class="row">
+        <button class="primary" id="rt-save">保存</button>
+        <button class="ghost" id="rt-test">测试连接（让模型说一句）</button>
+        <span class="msg" id="rt-msg"></span>
+      </div>
+      <div class="msg">开启后，电话里说的每一句都直接送给模型，模型边生成边回传音频；识别与对话合并成一次往返，实测首包 0.5 秒左右。</div>
+    </div>
+    <div class="panel">
+      <h2>在线测试：语音合成（TTS）</h2>
+      <div class="grid">
+        <div class="field wide"><label>测试文本</label><textarea id="tts-test-input">您好，我是您的语音助手，这是一段在线合成试听。</textarea></div>
+        <div class="field"><label>音色（留空则用当前配置）</label><input id="tts-test-voice"></div>
+        <div class="field"><label>试听</label><audio id="tts-audio" controls style="width:100%"></audio></div>
+      </div>
+      <div class="row">
+        <button class="primary" id="btn-test-tts">合成并播放</button>
+        <span class="msg" id="tts-test-msg"></span>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>在线测试：语音识别（ASR）</h2>
+      <div class="grid">
+        <div class="field"><label>音频文件（wav/mp3/m4a/ogg/webm 均可）</label><input type="file" id="asr-file" accept="audio/*"></div>
+        <div class="field"><label>或直接录音</label>
+          <div class="inline"><button class="ghost" id="btn-rec">开始录音</button><span class="msg" id="rec-msg" style="margin:0"></span></div>
+        </div>
+        <div class="field wide"><label>识别结果</label><textarea id="asr-test-text" rows="3" placeholder="识别结果会显示在这里"></textarea></div>
+      </div>
+      <div class="row">
+        <button class="primary" id="btn-test-asr">开始识别</button>
+        <span class="msg" id="asr-test-msg"></span>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>对话行为</h2>
+      <div class="grid">
+        <div class="field"><label>静音判停 (ms)</label><input id="silence_ms" type="number"></div>
+        <div class="field"><label>最小语音 (ms)</label><input id="min_speech_ms" type="number"></div>
+        <div class="field"><label>能量阈值</label><input id="energy_threshold" type="number"></div>
+        <div class="field"><label>最大句长 (s)</label><input id="max_utterance_seconds" type="number"></div>
+        <div class="field"><label>允许打断</label>
+          <select id="barge_in"><option value="true">开启</option><option value="false">关闭</option></select>
+        </div>
+        <div class="field"><label>AudioSocket 监听</label><input id="audio_listen"></div>
+      </div>
+      <div class="row"><button class="primary" id="save-voice">保存语音配置</button><span class="msg" id="voice-msg"></span></div>
+    </div>
+    <div class="panel">
+      <h2>处理提示音 & 按键控制</h2>
+      <div class="grid">
+        <div class="field"><label>处理中提示音</label><select id="tone_enabled"><option value="true">开启</option><option value="false">关闭</option></select></div>
+        <div class="field"><label>频率 Hz</label><input id="tone_freq" type="number"></div>
+        <div class="field"><label>间隔 ms</label><input id="tone_interval" type="number"></div>
+        <div class="field"><label>时长 ms</label><input id="tone_duration" type="number"></div>
+        <div class="field"><label>音量 0~1</label><input id="tone_volume" type="number" step="0.05"></div>
+        <div class="field"><label>回复长度上限（0=不限）</label><input id="max_reply_chars" type="number"></div>
+        <div class="field"><label>DTMF 控制</label><select id="dtmf_enabled"><option value="true">开启</option><option value="false">关闭</option></select></div>
+        <div class="field"><label>打断键</label><input id="dtmf_interrupt" maxlength="1"></div>
+        <div class="field"><label>挂断键</label><input id="dtmf_hangup" maxlength="1"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 话机 -->
+  <section id="tab-phones">
+    <div class="panel">
+      <h2>话机台账与注册状态</h2>
+      <table><thead><tr><th>号码</th><th>名称</th><th>注册</th><th>IP</th><th>互播</th><th>摘机直通</th><th>操作</th></tr></thead><tbody id="phone-body"></tbody></table>
+      <div class="row"><button class="ghost" id="phone-refresh">刷新注册状态</button><span class="msg" id="phone-msg"></span></div>
+    </div>
+    <div class="panel">
+      <h2>新增 / 编辑话机</h2>
+      <div class="grid">
+        <div class="field"><label>号码（分机号）</label><input id="ph-number" placeholder="1003"></div>
+        <div class="field"><label>名称</label><input id="ph-name" placeholder="前台"></div>
+        <div class="field"><label>密码（留空自动生成）</label><input id="ph-pass"></div>
+        <div class="field"><label>摘机直通号码（可选）</label><input id="ph-hotline" placeholder="9000"></div>
+        <div class="field"><label>允许互播</label><select id="ph-intercall"><option value="true">允许</option><option value="false">禁止</option></select></div>
+        <div class="field"><label>备注</label><input id="ph-note"></div>
+      </div>
+      <div class="row">
+        <button class="primary" id="ph-save">保存并应用</button>
+        <button class="ghost" id="ph-template">下载配置模板</button>
+        <span class="msg" id="ph-form-msg"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 系统 -->
+  <section id="tab-system">
+    <div class="panel">
+      <h2>通知推送（ServerChan）</h2>
+      <div class="grid">
+        <div class="field"><label>启用推送</label>
+          <select id="notify_enabled"><option value="true">开启</option><option value="false">关闭</option></select>
+        </div>
+        <div class="field"><label>SendKey（*** 表示不修改）</label><input id="notify_key" type="password" placeholder="SCT... 或 sctapi 的 SendKey"></div>
+        <div class="field"><label>同类消息最短间隔（分钟）</label><input id="notify_interval" type="number" min="0"></div>
+        <div class="field"><label>推送时机</label>
+          <div class="inline" style="flex-wrap:wrap;gap:14px">
+            <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="notify_startup" style="width:auto">启动时</label>
+            <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="notify_error" style="width:auto">云端调用失败</label>
+            <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="notify_disk" style="width:auto">磁盘超 90%</label>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <button class="primary" id="notify-save">保存并启用</button>
+        <button class="ghost" id="notify-test">发送测试推送</button>
+        <span class="msg" id="notify-msg"></span>
+      </div>
+      <div class="msg">SendKey 在 <a href="https://sct.ftqq.com/" target="_blank" style="color:var(--accent)">sct.ftqq.com</a> 微信扫码登录后获取；推送走 Server酱 转发，本机不需要公网入口。</div>
+    </div>
+    <div class="panel">
+      <h2>运行信息</h2>
+      <table><tbody id="sys-body"></tbody></table>
+    </div>
+    <div class="panel">
+      <h2>账号管理</h2>
+      <table><thead><tr><th>用户名</th><th>操作</th></tr></thead><tbody id="user-body"></tbody></table>
+      <div class="grid" style="margin-top:12px">
+        <div class="field"><label>当前账号改名</label><input id="u-newname" placeholder="新用户名"></div>
+        <div class="field"><label>当前账号新密码</label><input id="u-newpass" type="password" placeholder="至少 6 位"></div>
+        <div class="field"><label>新增账号用户名</label><input id="u-addname"></div>
+        <div class="field"><label>新增账号密码</label><input id="u-addpass" type="password"></div>
+      </div>
+      <div class="row">
+        <button class="primary" id="u-rename">改名</button>
+        <button class="primary" id="u-pass">改密码</button>
+        <button class="ghost" id="u-add">新增账号</button>
+        <span class="msg" id="u-msg"></span>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>HTTPS</h2>
+      <div class="row">
+        <select id="tls-mode"><option value="auto">自签证书（推荐）</option><option value="manual">使用导入证书</option><option value="off">关闭 HTTPS</option></select>
+        <button class="primary" id="tls-apply">应用</button>
+        <span class="msg" id="tls-msg"></span>
+      </div>
+      <div class="msg" id="tls-info"></div>
+      <div class="row">
+        <input type="file" id="tls-cert" accept=".pem,.crt,.cer">
+        <input type="file" id="tls-key" accept=".pem,.key">
+        <button class="ghost" id="tls-upload">导入证书</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<datalist id="dl-chat"></datalist>
+<datalist id="dl-asr"></datalist>
+<datalist id="dl-tts"></datalist>
+<datalist id="dl-voice"></datalist>
+<datalist id="dl-omni"></datalist>
+<datalist id="dl-voice2"></datalist>
+
+<script>const $=id=>document.getElementById(id);
+const api=async(p,o)=>{
+  const r=await fetch(p,o);
+  if(r.status===401){showAuth('login');throw new Error('未登录')}
+  const ct=r.headers.get('content-type')||'';
+  const d=ct.includes('json')?await r.json():await r.text();
+  if(!r.ok)throw new Error(typeof d==='string'?d:(d.error||('HTTP '+r.status)));
+  return d;
+};
+const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmtSize=n=>n>=1<<30?(n/(1<<30)).toFixed(2)+' GB':n>=1<<20?(n/(1<<20)).toFixed(0)+' MB':(n/1024).toFixed(0)+' KB';
+const fmtRate=n=>n>=1<<20?(n/(1<<20)).toFixed(1)+' MB/s':n>=1024?(n/1024).toFixed(1)+' KB/s':n.toFixed(0)+' B/s';
+
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  document.querySelectorAll('section').forEach(s=>s.classList.remove('show'));
+  $('tab-'+b.dataset.tab).classList.add('show');
+  if(b.dataset.tab==='models') loadModels();
+  if(b.dataset.tab==='voice') loadModels();
+  if(b.dataset.tab==='phones') loadPhones();
+});
+
+let cfg=null;
+async function loadConfig(){
+  cfg=await api('/api/config');
+  $('provider').value=cfg.ai.provider||guessProvider(cfg.ai.base_url)||'';
+  $('asr_provider').value=cfg.ai.asr_provider||guessProvider(cfg.ai.asr_base_url||cfg.ai.base_url)||'';
+  $('tts_provider').value=cfg.ai.tts_provider||guessProvider(cfg.ai.tts_base_url||cfg.ai.base_url)||'';
+  applyPresetNote();
+  $('chat_base').value=cfg.ai.base_url||'';
+  $('chat_key').value=cfg.api_key_set?'***':'';
+  $('chat_model').value=cfg.ai.chat_model||'';
+  $('system_prompt').value=cfg.ai.system_prompt||'';
+  $('greeting').value=cfg.agent.greeting||'';
+  $('temperature').value=cfg.ai.temperature??0.7;
+  $('asr_backend').value=cfg.ai.asr_backend||'whisper-cli';
+  $('asr_model_path').value=cfg.ai.asr_model_path||'';
+  $('asr_lang').value=cfg.ai.asr_lang||'zh';
+  $('asr_key').value=cfg.ai.asr_api_key||'';
+  $('asr_base').value=cfg.ai.asr_base_url||'';
+  $('asr_model_cloud').value=cfg.ai.asr_model||'';
+  $('tts_backend').value=cfg.ai.tts_backend||'edge-tts';
+  $('tts_voice').value=cfg.ai.tts_voice||'';
+  $('tts_key').value=cfg.ai.tts_api_key||'';
+  $('tts_base').value=cfg.ai.tts_base_url||'';
+  $('tts_model_cloud').value=cfg.ai.tts_model||'';
+  $('silence_ms').value=cfg.agent.silence_ms;  $('min_speech_ms').value=cfg.agent.min_speech_ms;
+  $('energy_threshold').value=cfg.agent.energy_threshold;
+  $('max_utterance_seconds').value=cfg.agent.max_utterance_seconds;
+  $('barge_in').value=String(!!cfg.agent.barge_in);
+  $('audio_listen').value=cfg.audio.listen||'';
+  const tone=cfg.agent.processing_tone||{};
+  $('tone_enabled').value=String(tone.enabled!==false);
+  $('tone_freq').value=tone.freq||800;
+  $('tone_interval').value=tone.interval_ms||1000;
+  $('tone_duration').value=tone.duration_ms||120;
+  $('tone_volume').value=tone.volume??0.15;
+  $('max_reply_chars').value=cfg.agent.max_reply_chars||0;
+  const dt=cfg.agent.dtmf||{};
+  $('dtmf_enabled').value=String(dt.enabled!==false);
+  $('dtmf_interrupt').value=dt.interrupt||'0';
+  $('dtmf_hangup').value=dt.hangup||'9';
+
+  const rt=cfg.realtime||{};
+  $('rt_enabled').value=String(!!rt.enabled);
+  $('rt_model').value=rt.model||'';
+  $('rt_voice').value=rt.voice||'';
+  $('rt_key').value=rt.api_key||'';
+  $('rt_base').value=rt.base_url||'';
+  $('rt_instructions').value=rt.instructions||'';
+
+  const nt=cfg.notify||{};
+  $('notify_enabled').value=String(!!nt.enabled);
+  $('notify_key').value=nt.serverchan_key||'';
+  $('notify_interval').value=Math.round((nt.min_interval_ms||300000)/60000);
+  $('notify_startup').checked=!!nt.on_startup;
+  $('notify_error').checked=nt.on_error!==false;
+  $('notify_disk').checked=nt.on_disk!==false;
+}
+
+function payload(){
+  const base=cfg||{};
+  const ai=(base.ai)||{};
+  return {
+    audio:{listen:$('audio_listen').value.trim()||'127.0.0.1:9092'},
+    ai:{
+      provider:$('provider').value,
+      base_url:$('chat_base').value.trim(),
+      api_key:$('chat_key').value.trim(),
+      chat_model:$('chat_model').value.trim(),
+      max_tokens:ai.max_tokens||0,
+      system_prompt:$('system_prompt').value,
+      temperature:parseFloat($('temperature').value)||0.7,
+      asr_backend:$('asr_backend').value,
+      asr_provider:$('asr_provider').value,
+      asr_model_path:$('asr_model_path').value.trim(),
+      asr_lang:$('asr_lang').value.trim(),
+      asr_cmd:ai.asr_cmd||'/usr/bin/whisper-cli',
+      asr_base_url:$('asr_base').value.trim(),
+      asr_api_key:$('asr_key').value.trim(),
+      asr_model:$('asr_model_cloud').value.trim(),
+      tts_backend:$('tts_backend').value,
+      tts_provider:$('tts_provider').value,
+      tts_voice:$('tts_voice').value.trim(),
+      tts_cmd:ai.tts_cmd||'/opt/edge-tts/bin/edge-tts',
+      tts_rate:ai.tts_rate||'+0%',
+      tts_base_url:$('tts_base').value.trim(),
+      tts_api_key:$('tts_key').value.trim(),
+      tts_model:$('tts_model_cloud').value.trim()
+    },
+    agent:{
+      greeting:$('greeting').value,      max_utterance_seconds:+$('max_utterance_seconds').value||15,
+      silence_ms:+$('silence_ms').value||700,
+      min_speech_ms:+$('min_speech_ms').value||200,
+      energy_threshold:+$('energy_threshold').value||700,
+      barge_in:$('barge_in').value==='true',
+      max_reply_chars:+$('max_reply_chars').value||0,
+      processing_tone:{
+        enabled:$('tone_enabled').value==='true',
+        freq:+$('tone_freq').value||800,
+        interval_ms:+$('tone_interval').value||1000,
+        duration_ms:+$('tone_duration').value||120,
+        volume:parseFloat($('tone_volume').value)||0.15
+      },
+      dtmf:{
+        enabled:$('dtmf_enabled').value==='true',
+        interrupt:$('dtmf_interrupt').value||'0',
+        hangup:$('dtmf_hangup').value||'9'
+      }
+    },
+    realtime:{
+      enabled:$('rt_enabled').value==='true',
+      model:$('rt_model').value.trim(),
+      voice:$('rt_voice').value.trim(),
+      api_key:$('rt_key').value.trim(),
+      base_url:$('rt_base').value.trim(),
+      instructions:$('rt_instructions').value
+    },
+    notify:{
+      enabled:$('notify_enabled').value==='true',
+      serverchan_key:$('notify_key').value.trim(),
+      min_interval_ms:Math.round((parseFloat($('notify_interval').value)||5)*60000),
+      on_startup:$('notify_startup').checked,
+      on_error:$('notify_error').checked,
+      on_disk:$('notify_disk').checked,
+      on_call_end:false
+    }
+  };
+}
+
+async function saveConfig(msgEl){
+  try{
+    const r=await api('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload())});
+    msgEl.textContent=(r&&r.ok)?'已保存，新通话生效':'保存失败';
+    msgEl.style.color=(r&&r.ok)?'var(--ok)':'var(--bad)';
+    await loadConfig();
+  }catch(e){msgEl.textContent='保存失败: '+e.message;msgEl.style.color='var(--bad)'}
+}
+$('save-ai').onclick=()=>saveConfig($('ai-msg'));
+$('save-voice').onclick=()=>saveConfig($('voice-msg'));
+$('test-ai').onclick=async()=>{
+  $('ai-msg').textContent='测试中…';
+  try{
+    const r=await api('/api/test',{method:'POST'});
+    $('ai-msg').textContent=r.ok?('可用：'+r.message+'（'+r.ms+'ms）'):('不可用：'+r.message);
+    $('ai-msg').style.color=r.ok?'var(--ok)':'var(--bad)';
+  }catch(e){$('ai-msg').textContent='测试失败: '+e.message;$('ai-msg').style.color='var(--bad)'}
+};
+
+async function loadModels(){
+  const r=await api('/api/models');
+  $('model-dir').textContent='模型目录：'+(r.dir||'');
+  const body=$('model-body');body.innerHTML='';
+  (r.models||[]).forEach(m=>{
+    const tr=document.createElement('tr');
+    let st=m.installed?'<span class="tag ok">已安装</span>':(m.busy?'<span class="tag busy">下载中 '+Math.round((m.progress||0)*100)+'%</span>':'<span class="tag">未安装</span>');
+    if(m.active)st+=' <span class="tag ok">使用中</span>';
+    tr.innerHTML='<td>'+esc(m.name)+'<br><span style="color:var(--muted);font-size:12px">'+esc(m.desc||'')+'</span></td>'+
+      '<td>'+fmtSize(m.size)+'</td><td>'+st+'</td><td></td>';
+    const td=tr.lastElementChild;
+    if(!m.installed){
+      const b=document.createElement('button');b.className='small';b.textContent='下载';
+      b.onclick=async()=>{await api('/api/models/download',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:m.name})});loadModels()};
+      td.appendChild(b);
+    }else{
+      if(!m.active){
+        const b=document.createElement('button');b.className='small';b.textContent='启用';
+        b.onclick=async()=>{await api('/api/models/activate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:m.name})});await loadConfig();loadModels()};
+        td.appendChild(b);
+      }
+      const d=document.createElement('button');d.className='small danger';d.style.marginLeft='6px';d.textContent='删除';
+      d.onclick=async()=>{if(confirm('删除 '+m.name+' ？')){await api('/api/models/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:m.name})});loadModels()}};
+      td.appendChild(d);
+    }
+    body.appendChild(tr);
+  });
+  const sel=$('asr_model_sel');sel.innerHTML='';
+  (r.models||[]).filter(m=>m.installed).forEach(m=>{
+    const o=document.createElement('option');o.value=m.name;o.textContent=m.name;sel.appendChild(o);
+  });
+  const cur=(cfg&&cfg.ai&&cfg.ai.asr_model_path||'').split('/').pop();
+  if(cur)sel.value=cur;
+  sel.onchange=()=>{$('asr_model_path').value=(r.dir||'')+'/'+sel.value};
+}
+
+$('btn-upload').onclick=async()=>{
+  const f=$('upload').files[0];
+  if(!f){$('upload-msg').textContent='先选文件';return}
+  const fd=new FormData();fd.append('file',f);
+  $('upload-msg').textContent='上传中…';
+  try{
+    const r=await api('/api/models/upload',{method:'POST',body:fd});
+    $('upload-msg').textContent=r.ok?('上传成功：'+r.name):'上传失败';
+    loadModels();
+  }catch(e){$('upload-msg').textContent='上传失败: '+e.message}
+};
+
+let phoneList=[];
+async function loadPhones(){
+  try{
+    const r=await api('/api/phones');
+    phoneList=r.phones||[];
+    const byAor={};
+    (r.contacts||[]).forEach(c=>byAor[c.aor]=c);
+    const body=$('phone-body');body.innerHTML='';
+    phoneList.forEach(p=>{
+      const ct=byAor[p.number]||{};
+      const reg=ct.uri?'<span class="tag ok">在线</span>':'<span class="tag">离线</span>';
+      const ip=(ct.uri||'').replace(/^[^@]*@/,'').replace(/;.*$/,'');
+      const tr=document.createElement('tr');
+      tr.innerHTML='<td>'+esc(p.number)+'</td><td>'+esc(p.name)+'</td><td>'+reg+'</td><td>'+esc(ip)+'</td>'+
+        '<td>'+(p.allow_intercall?'允许':'禁止')+'</td><td>'+esc(p.hotline||'—')+'</td><td></td>';
+      const td=tr.lastElementChild;
+      const eb=document.createElement('button');eb.className='small';eb.textContent='编辑';
+      eb.onclick=()=>{
+        $('ph-number').value=p.number;$('ph-name').value=p.name;$('ph-pass').value='';
+        $('ph-hotline').value=p.hotline||'';$('ph-intercall').value=String(!!p.allow_intercall);
+        $('ph-note').value=p.note||'';
+      };
+      const db=document.createElement('button');db.className='small danger';db.style.marginLeft='6px';db.textContent='删除';
+      db.onclick=async()=>{
+        if(confirm('删除话机 '+p.number+' ？')){
+          try{await api('/api/phones',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete',number:p.number})});loadPhones()}
+          catch(e){$('phone-msg').textContent=e.message}
+        }
+      };
+      td.appendChild(eb);td.appendChild(db);
+      body.appendChild(tr);
+    });
+    $('phone-msg').textContent=r.error?('Asterisk: '+r.error):'';
+  }catch(e){$('phone-msg').textContent='加载失败: '+e.message}
+}
+$('phone-refresh').onclick=()=>loadPhones();
+$('ph-save').onclick=async()=>{
+  const phone={
+    number:$('ph-number').value.trim(),
+    name:$('ph-name').value.trim(),
+    password:$('ph-pass').value,
+    hotline:$('ph-hotline').value.trim(),
+    allow_intercall:$('ph-intercall').value==='true',
+    note:$('ph-note').value.trim(),
+    enabled:true
+  };
+  if(!phone.number||!phone.name){$('ph-form-msg').textContent='号码和名称必填';return}
+  try{
+    await api('/api/phones',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'upsert',phone})});
+    $('ph-form-msg').textContent='已保存并应用';
+    loadPhones();
+  }catch(e){$('ph-form-msg').textContent='保存失败: '+e.message}
+};
+$('ph-template').onclick=()=>{
+  const n=$('ph-number').value.trim();
+  if(!n){$('ph-form-msg').textContent='先填号码';return}
+  window.open('/api/phones/template?number='+encodeURIComponent(n)+'&host='+location.hostname,'_blank');
+};
+
+async function loadUsers(){
+  try{
+    const r=await api('/api/users');
+    const body=$('user-body');body.innerHTML='';
+    (r.users||[]).forEach(name=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML='<td>'+esc(name)+(name===r.current?' <span class="tag ok">当前</span>':'')+'</td><td></td>';
+      if(name!==r.current){
+        const b=document.createElement('button');b.className='small danger';b.textContent='删除';
+        b.onclick=async()=>{
+          if(confirm('删除账号 '+name+' ？')){
+            try{await api('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete',name:name})});loadUsers()}
+            catch(e){$('u-msg').textContent=e.message}
+          }
+        };
+        tr.lastElementChild.appendChild(b);
+      }
+      body.appendChild(tr);
+    });
+    $('u-newname').placeholder='新用户名（当前：'+r.current+'）';
+  }catch(e){}
+}
+$('u-rename').onclick=async()=>{
+  const n=$('u-newname').value.trim();
+  if(!n)return;
+  try{
+    await api('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'rename',new_name:n})});
+    $('u-msg').textContent='改名成功';loadUsers();
+  }catch(e){$('u-msg').textContent=e.message}
+};
+$('u-pass').onclick=async()=>{
+  const p=$('u-newpass').value;
+  if(p.length<6){$('u-msg').textContent='密码至少 6 位';return}
+  try{
+    await api('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'password',password:p})});
+    $('u-msg').textContent='密码已修改';$('u-newpass').value='';
+  }catch(e){$('u-msg').textContent=e.message}
+};
+$('u-add').onclick=async()=>{
+  const n=$('u-addname').value.trim(),p=$('u-addpass').value;
+  try{
+    await api('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add',name:n,password:p})});
+    $('u-msg').textContent='已新增';$('u-addname').value='';$('u-addpass').value='';loadUsers();
+  }catch(e){$('u-msg').textContent=e.message}
+};
+
+async function loadTLS(){
+  try{
+    const t=await api('/api/tls');
+    $('tls-mode').value=t.mode||'auto';
+    if(t.ok){
+      $('tls-info').textContent='证书：'+t.subject+' ｜ 到期 '+t.not_after+' ｜ '+(t.self_signed?'自签':'已签发')+' ｜ DNS '+(t.dns||[]).join(', ')+' ｜ IP '+(t.ips||[]).join(', ');
+    }else{
+      $('tls-info').textContent='尚未生成证书';
+    }
+  }catch(e){}
+}
+function reloadScheme(mode){
+  const scheme=mode==='off'?'http://':'https://';
+  setTimeout(()=>{location.href=scheme+location.host+location.pathname},1800);
+}
+$('tls-apply').onclick=async()=>{
+  const mode=$('tls-mode').value;
+  try{
+    await api('/api/tls',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:mode})});
+    $('tls-msg').textContent='已应用，正在切换…';
+    reloadScheme(mode);
+  }catch(e){$('tls-msg').textContent=e.message}
+};
+$('tls-upload').onclick=async()=>{
+  const c=$('tls-cert').files[0],k=$('tls-key').files[0];
+  if(!c||!k){$('tls-msg').textContent='请选择证书和私钥';return}
+  const fd=new FormData();fd.append('cert',c);fd.append('key',k);
+  try{
+    const r=await fetch('/api/tls/upload',{method:'POST',body:fd});
+    if(!r.ok){$('tls-msg').textContent=await r.text();return}
+    $('tls-msg').textContent='导入成功，正在切换…';
+    reloadScheme('manual');
+  }catch(e){$('tls-msg').textContent=e.message}
+};
+
+async function refresh(){
+  try{
+    const s=await api('/api/status');
+    $('dot-ast').className='dot'+(s.asterisk?' on':'');
+    $('pill-ver').textContent='v'+s.version;
+    const up=s.uptime_sec;
+    $('pill-uptime').textContent='运行 '+Math.floor(up/3600)+'h'+Math.floor(up%3600/60)+'m';
+    $('pill-ai').textContent=s.ai_base?('AI '+s.ai_base.replace(/^https?:\/\//,'')):'AI 未配置';
+    $('p-active').textContent=s.active_calls;
+    $('p-total').textContent=s.total_calls;
+
+    const p=await api('/api/probe');
+    const n=p.now;
+    $('pill-host').textContent=n.cores+' 核 · '+fmtSize(n.mem_total_kb*1024);
+    $('p-cpu').textContent=n.cpu.toFixed(0)+'%';$('b-cpu').style.width=n.cpu+'%';
+    const memUsed=100*(n.mem_total_kb-n.mem_avail_kb)/Math.max(1,n.mem_total_kb);
+    $('p-mem').textContent=fmtSize((n.mem_total_kb-n.mem_avail_kb)*1024)+' / '+fmtSize(n.mem_total_kb*1024);
+    $('b-mem').style.width=memUsed+'%';
+    const diskUsed=100*(n.disk_total-n.disk_free)/Math.max(1,n.disk_total);
+    $('p-disk').textContent=fmtSize(n.disk_total-n.disk_free)+' / '+fmtSize(n.disk_total);
+    $('b-disk').style.width=diskUsed+'%';
+    $('p-load').textContent=n.load1.toFixed(2)+' / '+n.load5.toFixed(2)+' / '+n.load15.toFixed(2);
+    $('p-cores').textContent=n.cores+' 核';
+    $('p-temp').textContent=n.temp_c?n.temp_c.toFixed(1)+' °C':'—';
+    $('p-net').textContent='↓'+fmtRate(n.rx_bps)+'  ↑'+fmtRate(n.tx_bps);
+    const pb=$('proc-body');pb.innerHTML='';
+    Object.entries(n.procs||{}).forEach(([name,pr])=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML='<td>'+esc(name)+'</td><td>'+pr.pid+'</td><td>'+fmtSize(pr.rss_kb*1024)+'</td><td>'+(pr.cpu||0).toFixed(1)+'%</td>';
+      pb.appendChild(tr);
+    });
+
+    const calls=await api('/api/calls');
+    const box=$('calls');
+    if(!calls||!calls.length){box.innerHTML='<div class="msg">暂无通话记录</div>'}
+    else{
+      box.innerHTML='';
+      calls.forEach(c=>{
+        const d=document.createElement('div');d.className='call';
+        const top=document.createElement('div');top.className='top';
+        top.innerHTML='<span>'+new Date(c.start).toLocaleTimeString()+' · '+esc(c.uuid.slice(0,8))+'</span>'+
+          '<span>'+(c.active?'<span class="tag ok">通话中</span>':(c.dur_ms?(c.dur_ms/1000).toFixed(1)+'s':'—'))+'</span>';
+        d.appendChild(top);
+        (c.turns||[]).forEach(t=>{
+          const turn=document.createElement('div');turn.className='turn';
+          turn.innerHTML='<span class="you">你：'+esc(t.you)+'</span><br><span class="bot">AI：'+esc(t.bot)+'</span>';
+          d.appendChild(turn);
+        });
+        box.appendChild(d);
+      });
+    }
+
+    $('sys-body').innerHTML=
+      '<tr><td>版本</td><td>v'+s.version+'</td></tr>'+
+      '<tr><td>运行时长</td><td>'+Math.floor(up/3600)+' 小时 '+Math.floor(up%3600/60)+' 分</td></tr>'+
+      '<tr><td>Asterisk</td><td>'+(s.asterisk?'<span class="tag ok">在线</span>':'<span class="tag">离线</span>')+'</td></tr>'+
+      '<tr><td>AudioSocket</td><td>'+esc(s.audio_listen)+'</td></tr>'+
+      '<tr><td>控制台</td><td>'+esc(s.web_addr)+'</td></tr>'+
+      '<tr><td>AI Base</td><td>'+esc(s.ai_base||'未配置')+'</td></tr>';
+  }catch(e){}
+}
+
+// ---------- 服务商预设 / 在线拉取模型 / 在线测试 ----------
+let presets=[];
+function presetById(id){return presets.find(p=>p.id===id)}
+function guessProvider(base){
+  const b=(base||'').toLowerCase();
+  if(b.includes('deepseek.com'))return 'deepseek';
+  if(b.includes('siliconflow'))return 'siliconflow';
+  if(b.includes('dashscope')||b.includes('compatible-mode'))return 'dashscope';
+  if(b.includes('openai.com'))return 'openai';
+  if(b.includes('groq.com'))return 'groq';
+  if(b.includes('bigmodel.cn'))return 'zhipu';
+  if(b.includes('moonshot.cn'))return 'moonshot';
+  if(b.includes('hunyuan'))return 'hunyuan';
+  if(b.includes('volces.com'))return 'ark';
+  if(b.includes('11434')||b.includes('ollama'))return 'ollama';
+  return '';
+}
+function currentPreset(){return presetById($('provider').value)}
+function fillDatalist(id,items){
+  const dl=$(id);if(!dl)return;dl.innerHTML='';
+  [...new Set(items||[])].forEach(v=>{const o=document.createElement('option');o.value=v;dl.appendChild(o)});
+}
+function applyPresetNote(){
+  const p=currentPreset();
+  $('provider-note').textContent=p?(p.note||('支持：'+[p.chat?'对话':null,p.asr?'识别':null,p.tts?'合成':null].filter(Boolean).join(' / '))):'';
+}
+function fillProviderSelect(sel,cur){
+  sel.innerHTML='';
+  const o0=document.createElement('option');o0.value='';o0.textContent='（未选择，使用当前配置）';sel.appendChild(o0);
+  presets.forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.name;sel.appendChild(o)});
+  sel.value=cur||'';
+}
+async function loadProviders(){
+  try{
+    const r=await api('/api/providers');
+    presets=r.presets||[];
+    const ai=(cfg&&cfg.ai)||{};
+    fillProviderSelect($('provider'),ai.provider||r.guessed||'');
+    fillProviderSelect($('asr_provider'),ai.asr_provider||'');
+    fillProviderSelect($('tts_provider'),ai.tts_provider||'');
+    applyPresetNote();
+  }catch(e){}
+}
+function applyProvider(kind){
+  const sel=kind==='chat'?$('provider'):(kind==='asr'?$('asr_provider'):$('tts_provider'));
+  const p=presetById(sel.value);
+  if(!p)return;
+  if(kind==='chat'){
+    if(p.base_url)$('chat_base').value=p.base_url;
+    if(p.chat_models&&p.chat_models.length){fillDatalist('dl-chat',p.chat_models);if(!$('chat_model').value)$('chat_model').value=p.chat_models[0]}
+    applyPresetNote();
+  }else if(kind==='asr'){
+    if(p.base_url)$('asr_base').value=p.base_url;
+    if(p.asr_models&&p.asr_models.length){fillDatalist('dl-asr',p.asr_models);$('asr_model_cloud').value=p.asr_models[0]}
+    if(p.asr)$('asr_backend').value=(p.id==='siliconflow')?'siliconflow':'openai';
+  }else{
+    if(p.base_url)$('tts_base').value=p.base_url;
+    if(p.tts_models&&p.tts_models.length){fillDatalist('dl-tts',p.tts_models);$('tts_model_cloud').value=p.tts_models[0]}
+    if(p.voices&&p.voices.length){fillDatalist('dl-voice',p.voices);if(!$('tts_voice').value)$('tts_voice').value=p.voices[0]}
+    if(p.tts)$('tts_backend').value=(p.id==='siliconflow')?'siliconflow':'openai';
+  }
+}
+$('provider').onchange=()=>applyProvider('chat');
+$('asr_provider').onchange=()=>applyProvider('asr');
+$('tts_provider').onchange=()=>applyProvider('tts');
+async function fetchRemote(kind,base,key,field,dlId,btn,msgEl){
+  if(btn.disabled)return;
+  const old=btn.textContent;btn.disabled=true;btn.textContent='拉取中…';
+  msgEl.textContent='正在请求 '+base+'/models …';msgEl.style.color='var(--muted)';
+  try{
+    const q=new URLSearchParams({kind,base,key,field,provider:$('provider').value||''});
+    const r=await api('/api/models/remote?'+q.toString());
+    if(!r.ok)throw new Error(r.error||'拉取失败');
+    fillDatalist(dlId,r.models);
+    msgEl.textContent='可用模型 '+r.total+' 个，'+kind+' 候选 '+r.models.length+' 个（'+r.ms+'ms）';
+    msgEl.style.color='var(--ok)';
+  }catch(e){msgEl.textContent='拉取失败: '+e.message;msgEl.style.color='var(--bad)'}
+  finally{btn.disabled=false;btn.textContent=old}
+}
+$('fetch-chat').onclick=()=>fetchRemote('chat',$('chat_base').value,$('chat_key').value,'chat','dl-chat',$('fetch-chat'),$('ai-msg'));$('fetch-asr').onclick=()=>fetchRemote('asr',$('asr_base').value,$('asr_key').value,'asr','dl-asr',$('fetch-asr'),$('voice-msg'));
+$('fetch-tts').onclick=()=>fetchRemote('tts',$('tts_base').value,$('tts_key').value,'tts','dl-tts',$('fetch-tts'),$('voice-msg'));
+$('fetch-voice').onclick=()=>{
+  const p=currentPreset();const voices=[];
+  if(p&&p.voices)voices.push(...p.voices);
+  const m=$('tts_model_cloud').value.trim();
+  if(m&&/cosyvoice/i.test(m))['alex','anna','bella','benjamin','charles','claire','david','diana'].forEach(n=>voices.push(m+':'+n));
+  if($('tts_backend').value==='edge-tts')voices.push('zh-CN-XiaoxiaoNeural','zh-CN-YunxiNeural','zh-CN-YunyangNeural','zh-CN-XiaoyiNeural','zh-CN-YunjianNeural');
+  if(voices.length===0){$('voice-msg').textContent='当前服务商没有内置音色列表，可直接填写';$('voice-msg').style.color='var(--muted)';return}
+  fillDatalist('dl-voice',voices);$('voice-msg').textContent='已载入 '+[...new Set(voices)].length+' 个音色，可在“音色”框下拉选择';$('voice-msg').style.color='var(--ok)';
+};
+
+$('btn-test-tts').onclick=async()=>{  const msg=$('tts-test-msg');msg.textContent='合成中…';msg.style.color='var(--muted)';
+  try{
+    const r=await api('/api/test/tts',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({text:$('tts-test-input').value,voice:$('tts-test-voice').value.trim()})});
+    if(!r.ok)throw new Error(r.error||'合成失败');
+    const bin=atob(r.audio),arr=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+    const url=URL.createObjectURL(new Blob([arr],{type:r.mime||'audio/wav'}));
+    const au=$('tts-audio');au.src=url;au.play().catch(()=>{});
+    msg.textContent='合成成功：'+(r.bytes/1024).toFixed(1)+' KB / '+(r.duration||0).toFixed(1)+' 秒，耗时 '+r.ms+'ms（'+r.backend+'）';
+    msg.style.color='var(--ok)';
+  }catch(e){msg.textContent='合成失败: '+e.message;msg.style.color='var(--bad)'}
+};
+
+let rec=null,recChunks=[];
+$('btn-rec').onclick=async()=>{
+  if(rec&&rec.state==='recording'){rec.stop();return}
+  try{
+    const st=await navigator.mediaDevices.getUserMedia({audio:true});
+    recChunks=[];rec=new MediaRecorder(st);
+    rec.ondataavailable=e=>{if(e.data.size)recChunks.push(e.data)};
+    rec.onstop=()=>{
+      st.getTracks().forEach(t=>t.stop());
+      const blob=new Blob(recChunks,{type:rec.mimeType||'audio/webm'});
+      window.__recFile=new File([blob],'record.webm',{type:blob.type});
+      $('rec-msg').textContent='已录 '+(blob.size/1024).toFixed(0)+' KB，点“开始识别”';
+      $('btn-rec').textContent='重新录音';
+    };
+    rec.start();$('btn-rec').textContent='停止录音';$('rec-msg').textContent='录音中…再点一次停止';
+    setTimeout(()=>{if(rec&&rec.state==='recording'){rec.stop();$('btn-rec').textContent='重新录音'}},15000);
+  }catch(e){$('rec-msg').textContent='无法录音: '+e.message}
+};
+
+$('btn-test-asr').onclick=async()=>{
+  const msg=$('asr-test-msg');
+  const f=$('asr-file').files[0]||window.__recFile;
+  if(!f){msg.textContent='请先选择音频文件，或点“开始录音”';msg.style.color='var(--warn)';return}
+  msg.textContent='识别中…';msg.style.color='var(--muted)';
+  try{
+    const fd=new FormData();fd.append('file',f);
+    const r=await api('/api/test/asr',{method:'POST',body:fd});
+    if(!r.ok)throw new Error(r.error||'识别失败');
+    $('asr-test-text').value=r.text||'（识别结果为空）';
+    msg.textContent='识别完成：'+r.ms+'ms，音频 '+(r.duration||0).toFixed(1)+' 秒，后端 '+r.backend;
+    msg.style.color='var(--ok)';
+  }catch(e){msg.textContent='识别失败: '+e.message;msg.style.color='var(--bad)'}
+};
+
+// ---------- 端到端语音 / 通知推送 ----------
+$('rt-save').onclick=()=>saveConfig($('rt-msg'));
+$('rt-fetch').onclick=()=>{
+  fillDatalist('dl-omni',['qwen3.5-omni-flash-realtime','qwen3.5-omni-plus-realtime','qwen3.8-omni-flash-realtime']);
+  fillDatalist('dl-voice2',['Tina','Ethan','Cherry','Serena','Chelsie','Dylan','Jada']);
+  $('rt-msg').textContent='已载入候选模型与音色，点输入框可下拉选择';$('rt-msg').style.color='var(--ok)';
+};
+$('rt-test').onclick=async()=>{
+  const msg=$('rt-msg');msg.textContent='正在建立会话…';msg.style.color='var(--muted)';
+  try{
+    const r=await api('/api/test/omni',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:$('rt_model').value.trim(),voice:$('rt_voice').value.trim()})});
+    if(!r.ok)throw new Error(r.error||'失败');
+    msg.textContent='连通：建会话 '+r.open_ms+'ms，首包 '+r.first_ms+'ms，音频 '+r.audio_sec.toFixed(1)+'s｜回复：'+(r.reply||'（无）');
+    msg.style.color='var(--ok)';
+  }catch(e){msg.textContent='失败: '+e.message;msg.style.color='var(--bad)'}
+};
+$('notify-save').onclick=()=>saveConfig($('notify-msg'));
+$('notify-test').onclick=async()=>{
+  const msg=$('notify-msg');msg.textContent='发送中…';msg.style.color='var(--muted)';
+  try{
+    const r=await api('/api/test/notify',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({key:$('notify_key').value.trim()})});
+    if(!r.ok)throw new Error(r.error||'失败');
+    msg.textContent='已发送，请到微信里查看 Server酱 消息';
+    msg.style.color='var(--ok)';
+  }catch(e){msg.textContent='发送失败: '+e.message;msg.style.color='var(--bad)'}
+};
+
+let authMode='login';
+function showAuth(mode){
+  authMode=mode;$('auth').classList.add('show');
+  $('auth-title').textContent=mode==='setup'?'首次使用：创建管理员账号':'登录控制台';
+  $('auth-desc').textContent=mode==='setup'?'首次部署需要设置控制台用户名和密码。':'请输入用户名和密码。';
+  $('auth-pass2').style.display=mode==='setup'?'block':'none';
+  $('auth-submit').textContent=mode==='setup'?'创建并登录':'登录';
+  $('auth-err').textContent='';
+}
+async function submitAuth(){
+  const u=$('auth-user').value.trim(),p=$('auth-pass').value;
+  if(authMode==='setup'&&p!==$('auth-pass2').value){$('auth-err').textContent='两次密码不一致';return}
+  const url=authMode==='setup'?'/api/setup':'/api/login';
+  try{
+    const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+    if(!r.ok){$('auth-err').textContent=await r.text();return}
+    location.reload();
+  }catch(e){$('auth-err').textContent='请求失败: '+e.message}
+}
+$('auth-submit').onclick=submitAuth;
+$('auth-pass').addEventListener('keydown',e=>{if(e.key==='Enter')submitAuth()});
+$('btn-logout').onclick=async()=>{await fetch('/api/logout',{method:'POST'});location.reload()};
+
+(async()=>{
+  let st;
+  try{st=await (await fetch('/api/auth')).json()}catch(e){st={need_setup:false,logged_in:false}}
+  if(st.need_setup){showAuth('setup');return}
+  if(!st.logged_in){showAuth('login');return}
+  $('btn-logout').style.display='inline-block';
+  await loadProviders();
+  await loadConfig();
+  await refresh();
+  loadModels();
+  loadUsers();
+  loadTLS();
+  setInterval(refresh,2000);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug voicebridge (server)",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/cmd/voicebridge",
+      "args": ["-mode", "server", "-listen", ":5060"],
+      "env": { "GOPROXY": "https://goproxy.cn,direct" }
+    },
+    {
+      "name": "Run voicebridge (doctor)",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/cmd/voicebridge",
+      "args": ["-mode", "doctor"],
+      "env": { "GOPROXY": "https://goproxy.cn,direct" }
+    }
+  ]
+}

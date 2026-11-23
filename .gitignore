@@ -1,0 +1,19 @@
+# 构建产物
+dist/
+release/
+*.exe
+*.zip
+*.tar.gz
+
+# 运行时数据（不要提交）
+models/
+testdata/
+*.log
+*.wav
+*.pcm
+
+# 编辑器 / 系统
+.vscode/settings.json
+.idea/
+.DS_Store
+Thumbs.db

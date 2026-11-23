@@ -1,0 +1,25 @@
+[Unit]
+Description=SIPVoice AI Voice Agent
+After=network-online.target asterisk.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sipvoice
+Group=sipvoice
+ExecStart=/opt/sipvoice/voicebridge -mode agent -config /etc/sipvoice/config.json -web 0.0.0.0:8080
+Environment="PATH=/opt/edge-tts/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Restart=always
+RestartSec=3
+# 日志走 journald：journalctl -u sipvoice -f
+StandardOutput=journal
+StandardError=journal
+
+# 基础加固
+PrivateTmp=yes
+ProtectSystem=full
+ReadWritePaths=/etc/sipvoice /opt/sipvoice/models /etc/asterisk
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target
