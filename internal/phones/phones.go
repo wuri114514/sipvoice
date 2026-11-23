@@ -3,6 +3,7 @@ package phones
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -198,10 +199,28 @@ func Apply(content map[string]string, backupDir string) error {
 	return Reload()
 }
 
+// astCLI 执行一条 Asterisk CLI 命令。
+// 优先用 sudo（systemd 部署时服务用户需要提权）；容器里通常直接是 root，
+// 没有 sudo 或不需要提权时自动退回直接调用。
+func astCLI(cmd string) ([]byte, error) {
+	out, err := exec.Command("sudo", "-n", "/usr/sbin/asterisk", "-rx", cmd).CombinedOutput()
+	if err == nil {
+		return out, nil
+	}
+	if errors.Is(err, exec.ErrNotFound) || strings.Contains(err.Error(), "executable file not found") {
+		return exec.Command("/usr/sbin/asterisk", "-rx", cmd).CombinedOutput()
+	}
+	// sudo 存在但被拒绝（非 root 且没有 sudoers 规则）时也尝试直连
+	if out2, err2 := exec.Command("/usr/sbin/asterisk", "-rx", cmd).CombinedOutput(); err2 == nil {
+		return out2, nil
+	}
+	return out, err
+}
+
 // Reload 让 Asterisk 重新加载配置。
 func Reload() error {
 	for _, cmd := range []string{"pjsip reload", "dialplan reload"} {
-		out, err := exec.Command("sudo", "-n", "/usr/sbin/asterisk", "-rx", cmd).CombinedOutput()
+		out, err := astCLI(cmd)
 		if err != nil {
 			return fmt.Errorf("%s: %v: %s", cmd, err, string(out))
 		}
@@ -211,7 +230,7 @@ func Reload() error {
 
 // Contacts 返回已注册话机（解析 `pjsip show contacts`）。
 func Contacts() ([]map[string]string, error) {
-	out, err := exec.Command("sudo", "-n", "/usr/sbin/asterisk", "-rx", "pjsip show contacts").CombinedOutput()
+	out, err := astCLI("pjsip show contacts")
 	if err != nil {
 		return nil, fmt.Errorf("%v: %s", err, string(out))
 	}
