@@ -1,0 +1,49 @@
+#!/bin/sh
+# SIPVoice postinst：创建用户与目录、部署 Asterisk 配置、启动服务
+set -e
+
+case "$1" in
+    configure)
+        # 1. 系统用户
+        if ! id sipvoice >/dev/null 2>&1; then
+            adduser --system --group --no-create-home --shell /usr/sbin/nologin sipvoice >/dev/null
+        fi
+
+        # 2. 目录
+        install -d -m 755 /opt/sipvoice /opt/sipvoice/models
+        install -d -m 770 -o root -g sipvoice /etc/sipvoice /etc/sipvoice/backups /etc/sipvoice/tls
+        chown -R sipvoice:sipvoice /opt/sipvoice/models
+
+        # 3. 运行配置（不覆盖已有）
+        if [ ! -f /etc/sipvoice/config.json ]; then
+            install -m 660 -o root -g sipvoice \
+                /usr/share/sipvoice/config.example.json /etc/sipvoice/config.json
+        fi
+
+        # 4. Asterisk 配置：不是我们的就备份后再覆盖
+        stamp=$(date +%Y%m%d-%H%M%S)
+        for f in pjsip.conf extensions.conf rtp.conf; do
+            if [ -f "/etc/asterisk/$f" ] && ! grep -q "SIPVoice" "/etc/asterisk/$f" 2>/dev/null; then
+                cp -a "/etc/asterisk/$f" "/etc/asterisk/$f.bak.$stamp" 2>/dev/null || true
+            fi
+            install -m 664 -o root -g sipvoice \
+                "/usr/share/sipvoice/asterisk/$f" "/etc/asterisk/$f" 2>/dev/null || true
+        done
+        install -d -m 775 -o asterisk -g asterisk /var/spool/asterisk/fax 2>/dev/null || true
+
+        # 5. 面板保存话机配置时需要提权执行 asterisk
+        echo 'sipvoice ALL=(root) NOPASSWD: /usr/sbin/asterisk' > /etc/sudoers.d/sipvoice-asterisk
+        chmod 440 /etc/sudoers.d/sipvoice-asterisk
+
+        # 6. 服务
+        systemctl daemon-reload >/dev/null 2>&1 || true
+        systemctl enable asterisk >/dev/null 2>&1 || true
+        systemctl restart asterisk >/dev/null 2>&1 || true
+        systemctl enable sipvoice >/dev/null 2>&1 || true
+        systemctl restart sipvoice >/dev/null 2>&1 || true
+
+        echo "SIPVoice 已安装。控制台：https://<本机IP>:8080（首次访问需创建管理员）"
+        ;;
+esac
+
+exit 0

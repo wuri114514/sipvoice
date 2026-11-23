@@ -25,6 +25,11 @@ jobs:
       - name: 构建两个架构并打发布包
         run: make release
 
+      - name: 构建 .deb 安装包
+        run: |
+          bash scripts/build-deb.sh amd64
+          bash scripts/build-deb.sh arm64
+
       - name: 校验产物
         run: ls -lh dist/release/
 
@@ -33,10 +38,14 @@ jobs:
         with:
           files: |
             dist/release/*.tar.gz
-            dist/release/*.sha256
+            dist/release/*.tar.gz.sha256
+            dist/release/*.deb
+            dist/release/*.deb.sha256
           generate_release_notes: true
           body: |
             ## 安装
+
+            方式一（tar 包）：
 
             ```bash
             tar -xzf sipvoice-${{ github.ref_name }}-linux-amd64.tar.gz
@@ -44,5 +53,18 @@ jobs:
             sudo bash install.sh
             ```
 
-            支持 `linux/amd64` 与 `linux/arm64`（树莓派 4/5、ARM 服务器可直接用）。
-            需要 Ubuntu 22.04+ / Debian 12+，安装脚本会自动装 Asterisk 与 ffmpeg。
+            方式二（.deb，Debian/Ubuntu）：
+
+            ```bash
+            sudo apt install ./sipvoice_*_amd64.deb
+            ```
+
+            方式三（Docker，需 host 网络）：
+
+            ```bash
+            docker run -d --name sipvoice --restart unless-stopped --network host \
+              -v sipvoice-etc:/etc/sipvoice ghcr.io/${{ github.repository }}:latest
+            ```
+
+            支持 `linux/amd64` 与 `linux/arm64`。需要 Ubuntu 22.04+ / Debian 12+，
+            安装脚本会自动装 Asterisk 与 ffmpeg。**Alpha 阶段，请勿用于生产环境。**

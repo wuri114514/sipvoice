@@ -144,6 +144,44 @@ Notes:
 - the TLS certificate is bound to the host name, not the port — no need to regenerate it
 - open the new port in your firewall if you had one for 8080
 
+## Docker
+
+A single image contains Asterisk + voicebridge. **Host networking is strongly recommended** — SIP and
+RTP behind Docker's NAT need extra tuning.
+
+```bash
+docker run -d --name sipvoice --restart unless-stopped --network host \
+  -v sipvoice-etc:/etc/sipvoice \
+  -v sipvoice-models:/opt/sipvoice/models \
+  ghcr.io/USER/sipvoice:latest
+```
+
+Then open `https://<host-ip>:8080` and create the admin account.
+
+Build it yourself:
+
+```bash
+make linux-amd64
+docker build -t sipvoice:1.3.0 .
+# 国内网络可加：--build-arg APT_MIRROR=cn.archive.ubuntu.com
+```
+
+If you cannot use host networking, publish the ports (Asterisk may need NAT settings adjusted):
+
+```bash
+docker run -d --name sipvoice \
+  -p 5060:5060/udp -p 10000-10100:10000-10100/udp -p 8080:8080 \
+  -v sipvoice-etc:/etc/sipvoice sipvoice:1.3.0
+```
+
+| Volume | Purpose |
+|---|---|
+| `/etc/sipvoice` | configuration, API keys, admin account, phone inventory, TLS certificate |
+| `/opt/sipvoice/models` | optional local whisper models |
+
+`SIPVOICE_WEB` overrides the console bind address (default `0.0.0.0:8080`). See
+[docs/DOCKER.md](docs/DOCKER.md) for details and troubleshooting.
+
 ## Operations
 
 ```bash

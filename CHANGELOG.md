@@ -2,6 +2,13 @@
 
 本项目从"电话能打通"一路做到"可发布"，版本号按 **主.次.修订 b构建** 递增。
 
+## v1.3.1 — 打包与分发
+
+- 新增 `.deb` 安装包（amd64 / arm64）：`scripts/build-deb.sh`，dpkg 管理依赖与卸载，postinst 负责建用户、部署 Asterisk 配置、启动服务
+- 新增 Docker 镜像（Asterisk + voicebridge 一体）：`Dockerfile` + `docker/entrypoint.sh`，实测容器内完整通话链路可用
+- 发布流程改为 tag 触发，自动附带 tar.gz 与 deb
+- `.deb` 的 purge 会清理 /etc/sipvoice 与用户；remove 保留配置
+
 ## v1.3.0 — 部署收尾
 
 - 新增发布包与一键部署：`install.sh`（幂等）、`upgrade.sh`（失败自动回滚）、`uninstall.sh`

@@ -1,0 +1,16 @@
+#!/bin/sh
+# SIPVoice postrm：purge 时清理配置与数据（remove 时保留）
+set -e
+
+case "$1" in
+    purge)
+        rm -rf /etc/sipvoice /opt/sipvoice
+        rm -f /etc/sudoers.d/sipvoice-asterisk
+        if id sipvoice >/dev/null 2>&1; then
+            userdel sipvoice >/dev/null 2>&1 || true
+        fi
+        systemctl daemon-reload >/dev/null 2>&1 || true
+        ;;
+esac
+
+exit 0

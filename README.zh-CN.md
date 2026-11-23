@@ -138,6 +138,44 @@ sudo systemctl restart sipvoice
 - 如果你原本为 8080 开了防火墙，记得同步放行新端口
 - 想改回默认值：删掉该 drop-in 文件后 `systemctl daemon-reload && systemctl restart sipvoice`
 
+## Docker
+
+一个镜像里同时包含 Asterisk 和 voicebridge。**强烈建议用 host 网络**——SIP 与 RTP 在 Docker NAT
+后面需要额外调参。
+
+```bash
+docker run -d --name sipvoice --restart unless-stopped --network host \
+  -v sipvoice-etc:/etc/sipvoice \
+  -v sipvoice-models:/opt/sipvoice/models \
+  ghcr.io/USER/sipvoice:latest
+```
+
+然后打开 `https://<主机IP>:8080` 创建管理员账号。
+
+自己构建：
+
+```bash
+make linux-amd64
+docker build -t sipvoice:1.3.0 .
+# 国内网络可加：--build-arg APT_MIRROR=cn.archive.ubuntu.com
+```
+
+如果不能用 host 网络，就映射端口（Asterisk 可能需要额外的 NAT 设置）：
+
+```bash
+docker run -d --name sipvoice \
+  -p 5060:5060/udp -p 10000-10100:10000-10100/udp -p 8080:8080 \
+  -v sipvoice-etc:/etc/sipvoice sipvoice:1.3.0
+```
+
+| 卷 | 用途 |
+|---|---|
+| `/etc/sipvoice` | 配置、API Key、管理员账号、话机台账、TLS 证书 |
+| `/opt/sipvoice/models` | 可选的本地 whisper 模型 |
+
+`SIPVOICE_WEB` 环境变量可改控制台监听地址（默认 `0.0.0.0:8080`）。细节与排错见
+[docs/DOCKER.md](docs/DOCKER.md)。
+
 ## 运维
 
 ```bash

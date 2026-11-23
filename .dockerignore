@@ -1,0 +1,11 @@
+.git
+.github
+.vscode
+docs
+testdata
+models
+dist/release
+*.zip
+*.tar.gz
+*.exe
+*.log

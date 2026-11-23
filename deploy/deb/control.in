@@ -1,0 +1,15 @@
+Package: sipvoice
+Version: @VERSION@
+Section: comm
+Priority: optional
+Architecture: @ARCH@
+Depends: asterisk, asterisk-config, ffmpeg, curl, ca-certificates, sudo
+Maintainer: SIPVoice Contributors <sipvoice@users.noreply.github.com>
+Homepage: https://github.com/wuri114514/sipvoice
+Description: Lightweight SIP voice AI gateway
+ Asterisk plus a single Go binary that turns ordinary phone calls into an
+ AI conversation. Ships a web console, provider presets, online model
+ listing, end-to-end voice (Qwen-Omni-Realtime) and one-command deployment.
+ .
+ ALPHA software: written 100% by AI under human direction, not reviewed line
+ by line. Do not use it in production or in any life-safety context.

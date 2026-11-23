@@ -1,0 +1,10 @@
+#!/bin/sh
+# SIPVoice prerm：卸载或升级前停服务
+set -e
+
+if [ "$1" = "remove" ] || [ "$1" = "deconfigure" ]; then
+    systemctl stop sipvoice >/dev/null 2>&1 || true
+    systemctl disable sipvoice >/dev/null 2>&1 || true
+fi
+
+exit 0
