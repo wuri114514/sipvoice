@@ -1,0 +1,33 @@
+name: Feature request
+description: 提一个想法 / Suggest an idea
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 你遇到的问题 / Problem
+      description: 现在哪里不好用？描述场景比描述方案更有用。
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: 想法 / Proposed solution
+  - type: dropdown
+    id: area
+    attributes:
+      label: 涉及模块 / Area
+      options:
+        - 语音链路（ASR / TTS / 端到端）
+        - SIP / Asterisk / 网关
+        - 控制台 UI
+        - 部署与打包
+        - 文档
+        - 其他 / other
+  - type: checkboxes
+    id: help
+    attributes:
+      label: 你愿意参与吗 / Would you help?
+      options:
+        - label: 我可以帮忙测试 / I can test it
+        - label: 我可以提 PR / I can send a PR

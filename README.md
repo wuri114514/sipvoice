@@ -1,167 +1,218 @@
-# SIPVoice · 轻量 SIP 语音 AI 网关
+# SIPVoice · Lightweight SIP Voice AI Gateway
 
 ![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go&logoColor=white)
 ![Platform](https://img.shields.io/badge/platform-linux%2Famd64%20%7C%20linux%2Farm64-lightgrey)
+![Status](https://img.shields.io/badge/status-alpha-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-把一通普通的电话，变成能对话的 AI 助手：**话机/网关 → Asterisk → voicebridge → 任意大模型**。
-无公网、无云控制台、一条命令装完，跑在一台 2 核小机器上。
+**English** · [简体中文](README.zh-CN.md)
 
-> Turn ordinary phone calls into an AI conversation. Asterisk + a single Go binary,
-> 100% self-hosted, one-command install. Work in progress, MIT licensed.
+Turn an ordinary phone call into a conversation with an AI assistant:
+**phone / voice gateway → Asterisk → voicebridge → any LLM**.
+No public IP, no vendor cloud, no monthly platform fee — a single Go binary that runs on a 2-core box.
+
+> ⚠️ **Alpha software — please read before using**
+>
+> - This project was written **100% by AI** (an AI coding agent under human direction). It has been
+>   tested on real hardware and real phone calls, but it has **not** been reviewed line by line by a
+>   human maintainer.
+> - It is at an **early stage** (v1.x): interfaces, configuration keys and deployment scripts may
+>   change without notice.
+> - **Do not use it in production**, in any life-safety context, or where a dropped call or a wrong
+>   answer could cause harm. Evaluate it in a lab or at home first.
+> - Provided **as is**, without warranty of any kind. You are responsible for the phone numbers,
+>   credentials and AI usage costs you connect to it.
 
 ---
 
-## 它解决什么问题
+## What it does
 
-- 家里/办公室的**普通话机、传真机、实体语音网关**，想接上一个 AI 助手
-- 不想把设备注册到厂商云、不想开公网端口、不想付平台月费
-- 希望"装好就能拨号说话"，而不是先学一套 SIP 运维
+- ☎️ **AI answers your phone**: dial `9000`, the AI picks up, listens, replies, can be interrupted
+- 🎙️ **Two voice pipelines**
+  - Pipeline: cloud/local ASR → chat model → TTS (each part can be a different provider)
+  - End-to-end: Qwen-Omni-Realtime over WebSocket — audio in, audio out, **first response ≈ 0.5 s**
+- 🖥️ **Web console**: provider presets, live model list, TTS preview, ASR upload/record test,
+  phone extension inventory, system monitor
+- 🔔 **Alerts**: ServerChan push to WeChat (startup / cloud errors / low disk)
+- 📠 Fax receive (T.38 / G.711, saved as TIFF) — PDF conversion not implemented yet
 
-## 能做什么
-
-- ☎️ **电话呼入 AI 对话**：拨 `9000`，AI 接听、断句、可打断、可换音色
-- 🎙️ **两种语音链路**
-  - 三段式：云端/本地 ASR → 对话模型 → TTS（可各用各的服务商）
-  - 端到端：Qwen-Omni-Realtime，音频直接进模型、边生成边回放，**首包约 0.5 秒**
-- 🖥️ **Web 控制台**：服务商预设、在线拉取模型列表、TTS 试听、ASR 上传/录音识别、话机台账、监控
-- 🔔 **告警推送**：ServerChan 转发到微信（启动 / 云端失败 / 磁盘告警）
-- 📠 传真接收（T.38/G.711，落 TIFF）— 尚未做 PDF 转换
-- 🧰 部署：`install.sh` 一键安装、`upgrade.sh` 带自动回滚、`uninstall.sh`
-
-## 架构
+## Architecture
 
 ```
- ┌──────────┐   SIP/RTP    ┌───────────┐   AudioSocket   ┌──────────────┐
- │ 话机 /   │ ───────────► │ Asterisk  │ ──────────────► │ voicebridge  │
- │ 语音网关 │ ◄─────────── │   22      │ ◄────────────── │  (Go, 单文件) │
- └──────────┘              └───────────┘   PCMU 20ms     └──────┬───────┘
-                                                                 │ HTTPS / WSS
-                                                        ┌────────▼────────┐
-                                                        │ ASR / LLM / TTS │
-                                                        │ 或 端到端语音模型 │
-                                                        └─────────────────┘
+ ┌────────────┐   SIP/RTP    ┌───────────┐   AudioSocket   ┌──────────────┐
+ │ phone /    │ ───────────► │ Asterisk  │ ──────────────► │ voicebridge  │
+ │ FXS gateway│ ◄─────────── │    22     │ ◄────────────── │ (Go, 1 file) │
+ └────────────┘              └───────────┘   PCMU 20 ms    └──────┬───────┘
+                                                                  │ HTTPS / WSS
+                                                         ┌────────▼────────┐
+                                                         │ ASR / LLM / TTS │
+                                                         │ or end-to-end   │
+                                                         └─────────────────┘
 ```
 
-- Asterisk 负责 SIP 信令、G.711 编解码、传真
-- voicebridge 负责 VAD 断句、打断（barge-in）、DTMF、AI 调用、Web 控制台
-- 音频通过 AudioSocket（TCP）在两者之间传递，不依赖外部服务
+- **Asterisk** handles SIP signalling, G.711 codecs and fax
+- **voicebridge** handles VAD segmentation, barge-in, DTMF, AI calls and the web console
+- Audio flows over **AudioSocket** (TCP) between them — no external media service
 
-## 快速开始
+## Requirements
 
-前置：Ubuntu 22.04/24.04/26.04（Debian 亦可）、2 核 2 GB、能访问你选的 AI 服务商。
+- Ubuntu 22.04 / 24.04 / 26.04 or Debian 12+ (systemd)
+- 2 CPU cores, 2 GB RAM, ~2 GB disk
+- Network access to your chosen AI provider (and to apt for the dependencies)
+- Optional: a SIP phone (MicroSIP, Zoiper, a real desk phone) or an FXS gateway
+
+## Quick start
 
 ```bash
-# 1. 拿到发布包（或自行编译，见下）
-scp sipvoice-<版本>-linux-amd64.tar.gz user@主机:/tmp/
-ssh user@主机
-tar -xzf /tmp/sipvoice-<版本>-linux-amd64.tar.gz
-cd sipvoice-<版本>
+# 1. get a release package (or build it yourself, see below)
+scp sipvoice-<version>-linux-amd64.tar.gz user@host:/tmp/
+ssh user@host
+tar -xzf /tmp/sipvoice-<version>-linux-amd64.tar.gz
+cd sipvoice-<version>
 
-# 2. 一条命令安装（会自动装 asterisk / ffmpeg / curl）
+# 2. one command install (installs asterisk / ffmpeg / curl for you)
 sudo bash install.sh
 
-# 3. 打开控制台，创建管理员，填服务商与 Key
-#    https://<主机IP>:8080
+# 3. open the console, create the admin account, add your provider key
+#    https://<host-ip>:8080
 ```
 
-装完拨号：
+Then dial:
 
-| 号码 | 用途 |
+| Number | Purpose |
 |---|---|
-| `9000` | 与 AI 对话 |
-| `600` | 接收传真 |
-| `1001` / `1002` | 测试分机（密码 `SipVoice1001` / `SipVoice1002`） |
-| 分机互拨 | 1001 ↔ 1002 |
+| `9000` | Talk to the AI |
+| `600` | Receive a fax |
+| `1001` / `1002` | Test extensions (passwords `SipVoice1001` / `SipVoice1002`) |
 
-> 首次登录后请立刻改掉默认分机密码：控制台 →「话机」→ 编辑。
+> Change the default extension passwords right after the first login (Console → Phones).
 
-## 截图
+## Screenshots
 
-| AI 服务与模型 | 语音与在线测试 |
+| AI providers | Voice & online tests |
 |---|---|
 | ![AI](docs/screenshots/panel-ai.png) | ![Voice](docs/screenshots/panel-voice.png) |
 
-## 配置
+## Configuration
 
-全部配置都在控制台里改，保存即生效（写入 `/etc/sipvoice/config.json`）：
+Everything is editable in the console; changes are written to `/etc/sipvoice/config.json` and applied
+without a restart.
 
-- **服务商**：DeepSeek / 硅基流动 / 阿里百炼 / OpenAI / Groq / 智谱 / Kimi / 混元 / 火山方舟 / Ollama / 自定义
-- **模型**：可手填，也可「拉取列表」用你的 Key 在线获取真实可用模型
-- **端到端语音**：`realtime.enabled`，默认 `qwen3.5-omni-flash-realtime`
-- **对话行为**：静音判停、能量阈值、最大句长、是否允许打断、处理提示音
-- **按键**：`0` 打断播报，`9` 挂断（可改）
+- **Providers**: DeepSeek, SiliconFlow, Alibaba DashScope, OpenAI, Groq, Zhipu, Moonshot, Tencent
+  Hunyuan, Volcano Ark, local Ollama, custom OpenAI-compatible endpoints
+- **Models**: type a name, or click *Fetch list* to query the provider with your key
+- **End-to-end voice**: `realtime.enabled`, default `qwen3.5-omni-flash-realtime`
+- **Conversation**: silence timeout, energy threshold, max utterance, barge-in, processing tone
+- **DTMF**: `0` interrupts playback, `9` hangs up (both configurable)
 
-配置文件也可以直接编辑（重启服务生效）：
+A minimal config file looks like this:
 
 ```json
 {
-  "ai":       { "base_url": "https://api.deepseek.com/v1", "chat_model": "deepseek-flash" },
-  "realtime": { "enabled": true, "model": "qwen3.5-omni-flash-realtime" },
-  "agent":    { "greeting": "你好，有什么能够帮助你的？" }
+  "audio": { "listen": "127.0.0.1:9092" },
+  "ai": {
+    "base_url": "https://api.deepseek.com/v1",
+    "api_key": "sk-...",
+    "chat_model": "deepseek-flash",
+    "asr_backend": "siliconflow",
+    "tts_backend": "siliconflow"
+  },
+  "realtime": { "enabled": false },
+  "agent": { "greeting": "Hello, how can I help you?" }
 }
 ```
 
-## 部署与运维
+## Operations
 
 ```bash
-sudo bash install.sh                 # 幂等安装（首次约 40 秒）
-sudo bash upgrade.sh <新二进制>       # 升级，健康检查失败自动回滚
-sudo bash upgrade.sh --rollback       # 回滚
-sudo bash uninstall.sh [--purge]      # 卸载
-systemctl status sipvoice             # 服务状态
-journalctl -u sipvoice -f             # 实时日志
+sudo bash install.sh                 # idempotent install (~40 s on a clean box)
+sudo bash upgrade.sh <new-binary>    # upgrade with automatic rollback on failure
+sudo bash upgrade.sh --rollback       # roll back to the previous binary
+sudo bash uninstall.sh [--purge]      # uninstall (--purge also removes config/data)
+systemctl status sipvoice
+journalctl -u sipvoice -f
 ```
 
-## 从源码编译
+## Build from source
 
-需要 Go 1.24+：
+Go 1.24+ is required. The code is **pure Go**: no cgo, no assembly, no third-party modules.
 
 ```bash
 git clone https://github.com/USER/sipvoice.git && cd sipvoice
-make build          # 本机
-make release        # linux/amd64 + linux/arm64 发布包
-go test ./...       # 单元测试
+make build            # current platform
+make release          # linux/amd64 + linux/arm64 tarballs in dist/release/
+go test ./...
 ```
 
-交叉编译（无需目标机）：
+### Other architectures (ARMv7, MIPS, RISC-V…)
+
+Because nothing is architecture-specific, you can cross-compile for any Linux target Go supports:
 
 ```bash
-GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o dist/voicebridge-linux-arm64 ./cmd/voicebridge
+# 32-bit ARM (Raspberry Pi 2/Zero, routers)
+GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" \
+  -o voicebridge-linux-armv7 ./cmd/voicebridge
+
+# little-endian MIPS (many routers / NAS)
+GOOS=linux GOARCH=mipsle GOMIPS=softfloat CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" \
+  -o voicebridge-linux-mipsle ./cmd/voicebridge
+
+# RISC-V 64
+GOOS=linux GOARCH=riscv64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" \
+  -o voicebridge-linux-riscv64 ./cmd/voicebridge
 ```
 
-## 目录结构
+Supported `GOARCH` values include `amd64`, `arm64`, `arm`, `386`, `mips`, `mipsle`, `mips64le`,
+`ppc64le`, `riscv64`, `s390x`, `loong64`.
+
+Caveats on exotic platforms: you still need a working **Asterisk** and **ffmpeg** for that
+architecture from your distro (or built by yourself); the installer only knows `apt`. Officially
+tested targets are `linux/amd64` and `linux/arm64`.
+
+## Project layout
 
 ```
-cmd/voicebridge/    程序入口（server / agent / calltest / doctor / mockai 等模式）
+cmd/voicebridge/     entry point (server / agent / calltest / doctor / mockai modes)
 internal/
-  audiosock/        AudioSocket 协议与连接
-  voice/            VAD 断句、打断、回合编排
-  omni/             端到端语音会话（Qwen-Omni-Realtime）
-  ws/               自研 WebSocket 客户端（零第三方依赖）
-  adapters/         云端 ASR/TTS/对话、本地 whisper、模型列表
-  webui/            内嵌控制台与 REST API
-  phones/           话机台账，生成 Asterisk 配置
+  audiosock/         AudioSocket protocol and connection handling
+  voice/             VAD, barge-in, turn orchestration
+  omni/              end-to-end voice sessions (Qwen-Omni-Realtime)
+  ws/                minimal WebSocket client (no third-party dependency)
+  adapters/          cloud ASR/TTS/chat, local whisper, model listing
+  webui/             embedded console and REST API
+  phones/            extension inventory, renders Asterisk config
   auth/ config/ models/ media/ netutil/ sysinfo/ ...
-deploy/             安装/升级/卸载脚本与 Asterisk 基线配置
+deploy/              install / upgrade / uninstall scripts, Asterisk baseline configs
+docs/                screenshots, release process
 ```
 
-## 已知限制
+## Troubleshooting
 
-- 传真只完成"接收并落 TIFF"，PDF 转换和面板下载未做
-- 端到端语音目前适配阿里云百炼 Qwen-Omni-Realtime（协议兼容者可自行扩展）
-- 未做 Kubernetes / 容器编排，定位是单机小盒子
-- 默认分机密码是公开的，务必在控制台改掉
+| Symptom | Check |
+|---|---|
+| Console unreachable | `systemctl status sipvoice`; self-signed cert → accept it once in the browser |
+| Phone registers but AI is silent | `journalctl -u sipvoice -f`; provider key and model name |
+| Extensions missing after reboot | handled by a systemd drop-in that reloads PJSIP; check `asterisk -rx "pjsip show endpoints"` |
+| No audio at all | `ss -lntp` shows `127.0.0.1:9092`; Asterisk must reach the AudioSocket |
 
-## 路线图
+## Roadmap
 
-- [x] SIP 信令、AudioSocket 媒体桥、VAD/打断
-- [x] 三段式与端到端语音、Web 控制台、一键部署
-- [x] 服务商预设、在线模型列表、TTS/ASR 在线测试、告警推送
-- [ ] 传真：TIFF → PDF + 控制台查看/下载
-- [ ] Docker 镜像
-- [ ] 多语言 README
+- [x] SIP signalling, AudioSocket bridge, VAD/barge-in
+- [x] Pipeline and end-to-end voice, web console, one-command deploy
+- [x] Provider presets, live model list, TTS/ASR online tests, alert push
+- [ ] Fax: TIFF → PDF and download from the console
+- [ ] `.deb` / `.rpm` packages
+- [ ] Docker image
+- [ ] More end-to-end voice providers
 
-## 许可
+## Contributing
 
-[MIT](LICENSE)
+Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Since this code was
+AI-generated, a careful human review of any change is especially valuable.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+Runtime components (Asterisk, ffmpeg, whisper.cpp, cloud APIs) are **not** bundled; see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for their licenses and how they are used.

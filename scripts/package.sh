@@ -23,6 +23,8 @@ install -m 644 "$ROOT/deploy/upgrade.sh" "$PKG/upgrade.sh"
 install -m 644 "$ROOT/deploy/uninstall.sh" "$PKG/uninstall.sh"
 install -m 644 "$ROOT/deploy/sipvoice.service" "$PKG/sipvoice.service"
 install -m 644 "$ROOT/deploy/config.example.json" "$PKG/config.example.json"
+install -m 644 "$ROOT/LICENSE" "$PKG/LICENSE"
+install -m 644 "$ROOT/THIRD_PARTY_NOTICES.md" "$PKG/THIRD_PARTY_NOTICES.md"
 mkdir -p "$PKG/asterisk"
 install -m 644 "$ROOT/deploy/asterisk/"*.conf "$PKG/asterisk/"
 
