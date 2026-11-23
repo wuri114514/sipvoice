@@ -1,13 +1,10 @@
 # 构建产物
-dist/
-release/
-*.exe
-*.zip
-*.tar.gz
+/dist/
+/release/
 
 # 运行时数据（不要提交）
-models/
-testdata/
+/models/
+/testdata/
 *.log
 *.wav
 *.pcm
@@ -17,3 +14,8 @@ testdata/
 .idea/
 .DS_Store
 Thumbs.db
+
+# 发布包
+*.zip
+*.tar.gz
+*.exe
