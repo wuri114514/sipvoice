@@ -3,7 +3,7 @@ Version: @VERSION@
 Section: comm
 Priority: optional
 Architecture: @ARCH@
-Depends: asterisk, asterisk-config, ffmpeg, curl, ca-certificates, sudo
+Depends: asterisk, asterisk-config, ffmpeg, curl, ca-certificates, sudo, uuid-runtime
 Maintainer: SIPVoice Contributors <sipvoice@users.noreply.github.com>
 Homepage: https://github.com/wuri114514/sipvoice
 Description: Lightweight SIP voice AI gateway

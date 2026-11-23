@@ -66,6 +66,7 @@ NEED=""
 command -v curl >/dev/null 2>&1      || NEED="$NEED curl"
 [ -d /etc/ssl/certs ]                || NEED="$NEED ca-certificates"
 command -v ffmpeg >/dev/null 2>&1    || NEED="$NEED ffmpeg"
+command -v uuidgen >/dev/null 2>&1   || NEED="$NEED uuid-runtime"
 if [ "$SKIP_ASTERISK" -eq 0 ]; then
     command -v asterisk >/dev/null 2>&1 || NEED="$NEED asterisk"
 fi

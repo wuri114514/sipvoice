@@ -13,6 +13,7 @@ import (
 	"log"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -51,15 +52,15 @@ func ReadFrame(r io.Reader) (Frame, error) {
 
 // WriteFrame 写一条消息。
 func WriteFrame(w io.Writer, typ byte, payload []byte) error {
-	h := [3]byte{typ, byte(len(payload) >> 8), byte(len(payload))}
-	if _, err := w.Write(h[:]); err != nil {
-		return err
-	}
-	if len(payload) > 0 {
-		_, err := w.Write(payload)
-		return err
-	}
-	return nil
+	// 头和负载必须一次写入：Asterisk 的 res_audiosocket 在某些版本里会按整帧读取，
+	// 分成两次 write 会产生两个 TCP 段，可能被判定为帧不完整导致通话被挂断。
+	buf := make([]byte, 3+len(payload))
+	buf[0] = typ
+	buf[1] = byte(len(payload) >> 8)
+	buf[2] = byte(len(payload))
+	copy(buf[3:], payload)
+	_, err := w.Write(buf)
+	return err
 }
 
 // Conn 是一通电话的 AudioSocket 连接。
@@ -73,6 +74,14 @@ type Conn struct {
 	FramesOut int64
 	BytesIn   int64
 	BytesOut  int64
+
+	// lastWrite 是最后一次成功写帧的时间戳（纳秒），用于静音填充判断。
+	lastWrite atomic.Int64
+}
+
+// LastWrite 返回最后一次写帧的时间。
+func (c *Conn) LastWrite() time.Time {
+	return time.Unix(0, c.lastWrite.Load())
 }
 
 // WriteAudio 发送一帧 8kHz PCM。
@@ -84,6 +93,7 @@ func (c *Conn) WriteAudio(pcm []byte) error {
 	}
 	c.FramesOut++
 	c.BytesOut += int64(len(pcm))
+	c.lastWrite.Store(time.Now().UnixNano())
 	return nil
 }
 

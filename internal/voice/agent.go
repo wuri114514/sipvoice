@@ -22,6 +22,7 @@ const (
 	sampleRate = 8000
 	frameMS    = 20
 	frameBytes = 320  // 20ms @ 8k, 16-bit
+	bargeGraceFrames = 10 // 播出 ~200ms 后才允许语音打断
 	preRollMax = 8000 // 1 秒预录
 )
 
@@ -125,6 +126,8 @@ func (a *Agent) Handle(ctx context.Context, c *audiosock.Conn) error {
 
 	in := make(chan frame, 250)
 	go a.readLoop(ctx, c, in)
+	// 持续发送静音，避免部分 Asterisk 版本（如 20.x）在应用暂时无输出时提前挂断
+	go a.fillSilence(ctx, c)
 
 	// 端到端语音模型优先：一条 WebSocket 直接吃音频、吐音频
 	if rc := a.omniClient(); rc != nil {
@@ -351,7 +354,9 @@ func (a *Agent) playStream(ctx context.Context, c *audiosock.Conn, ch <-chan []i
 			if len(pre) > preRollMax {
 				pre = pre[len(pre)-preRollMax:]
 			}
-			if bargeIn {
+			// 只在"已经播出一点声音"之后才允许打断。
+			// 否则模型还在生成时，用户/环境音会把这一轮直接取消，对方只听到静音。
+			if bargeIn && sent >= bargeGraceFrames {
 				if f.rms >= thr {
 					hot++
 					if hot >= 3 {
@@ -460,12 +465,34 @@ func (a *Agent) round(ctx context.Context, c *audiosock.Conn, seg []int16, in <-
 	}
 }
 
+// fillSilence 保证连接上每 20ms 至少有一帧数据。
+// 部分 Asterisk 版本在 AudioSocket 应用"暂时没有输出"时会判定失败并挂断，
+// 持续发静音帧可以规避（实测 Ubuntu 24.04 的 Asterisk 20.6 会这样）。
+func (a *Agent) fillSilence(ctx context.Context, c *audiosock.Conn) {
+	silent := make([]byte, frameBytes)
+	tk := time.NewTicker(frameMS * time.Millisecond)
+	defer tk.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tk.C:
+			if time.Since(c.LastWrite()) >= frameMS*time.Millisecond {
+				if err := c.WriteAudio(silent); err != nil {
+					return
+				}
+			}
+		}
+	}
+}
+
 // readLoop 把 AudioSocket 帧转成 PCM / DTMF 事件。
 func (a *Agent) readLoop(ctx context.Context, c *audiosock.Conn, in chan<- frame) {
 	defer close(in)
 	for {
 		fr, err := c.ReadFrame()
 		if err != nil {
+			log.Printf("[voice] 读帧结束 uuid=%s: %v", c.UUID, err)
 			return
 		}
 		switch fr.Type {
@@ -480,12 +507,14 @@ func (a *Agent) readLoop(ctx context.Context, c *audiosock.Conn, in chan<- frame
 				return
 			}
 		case audiosock.TypeDTMF:
+			log.Printf("[voice] 收到 DTMF %q", string(fr.Payload))
 			select {
 			case in <- frame{dtmf: string(fr.Payload)}:
 			case <-ctx.Done():
 				return
 			}
 		case audiosock.TypeHangup:
+			log.Printf("[voice] 收到对端挂断帧")
 			return
 		}
 	}
