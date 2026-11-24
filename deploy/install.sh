@@ -155,6 +155,48 @@ DROPIN
     # 传真落盘目录
     install -d -m 775 -o asterisk -g asterisk /var/spool/asterisk/fax 2>/dev/null || true
 
+    # ---------- 5.1 存储与日志保留 ----------
+    # 有独立数据盘（/data 是挂载点）就把录音/传真放过去，否则放系统盘
+    if mountpoint -q /data 2>/dev/null; then
+        REC_DIR=/data/recordings
+        FAX_DIR=/data/fax
+    else
+        REC_DIR=/var/lib/sipvoice/recordings
+        FAX_DIR=/var/lib/sipvoice/fax
+    fi
+    install -d -m 750 -o asterisk -g asterisk "$REC_DIR" "$REC_DIR/monitor" "$FAX_DIR"
+    log "录音目录：$REC_DIR（上限 ${REC_LIMIT_GB:-5}G，滚动覆盖）"
+
+    # 把 Asterisk 的 monitor / fax 目录绑到存储目录（重启后由 fstab 兜底）
+    for pair in "/var/spool/asterisk/monitor:$REC_DIR/monitor" "/var/spool/asterisk/fax:$FAX_DIR"; do
+        src=${pair%%:*}; dst=${pair##*:}
+        install -d -m 750 -o asterisk -g asterisk "$src" "$dst"
+        if ! mountpoint -q "$src"; then
+            mount --bind "$dst" "$src" 2>/dev/null || warn "绑定挂载失败：$dst -> $src"
+        fi
+        if ! grep -q " $src " /etc/fstab 2>/dev/null; then
+            printf '%s  %s  none  bind,nofail  0  0\n' "$dst" "$src" >> /etc/fstab
+        fi
+    done
+
+    # 滚动清理：每 5 分钟检查一次，超上限删最旧的
+    install -m 755 "$SRC/sipvoice-rec-cleanup.sh" /usr/local/sbin/sipvoice-rec-cleanup.sh
+    install -m 644 "$SRC/systemd/sipvoice-rec-cleanup.service" /etc/systemd/system/
+    install -m 644 "$SRC/systemd/sipvoice-rec-cleanup.timer" /etc/systemd/system/
+    cat > /etc/default/sipvoice-rec <<EOF
+# SIPVoice 录音保留策略
+DIR=$REC_DIR
+LIMIT_GB=${REC_LIMIT_GB:-5}
+TARGET_PERCENT=90
+EOF
+    systemctl daemon-reload
+    systemctl enable --now sipvoice-rec-cleanup.timer >/dev/null 2>&1 || true
+    log "录音清理定时器已启用（每 5 分钟）"
+
+    # 日志按大小轮转，防止 messages.log 无限增长
+    install -m 644 "$SRC/logrotate-asterisk" /etc/logrotate.d/asterisk
+    log "Asterisk 日志轮转已配置（超过 50M 切分，保留 5 份）"
+
     systemctl enable asterisk >/dev/null 2>&1 || true
     systemctl restart asterisk || die "Asterisk 启动失败，看 journalctl -u asterisk"
     for _ in $(seq 1 15); do

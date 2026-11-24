@@ -176,6 +176,16 @@ docker run -d --name sipvoice \
 `SIPVOICE_WEB` 环境变量可改控制台监听地址（默认 `0.0.0.0:8080`）。细节与排错见
 [docs/DOCKER.md](docs/DOCKER.md)。
 
+## 存储与日志
+
+- **通话录音**：9000 的通话录音写到 /var/spool/asterisk/monitor，实际落在数据盘
+  /data/recordings/monitor（没有独立数据盘时用 /var/lib/sipvoice/recordings）
+- **滚动覆盖**：定时器每 5 分钟检查一次，录音目录超过 **5G** 就从最旧的文件开始删，
+  清到 90% 以下停止。改额度：编辑 /etc/default/sipvoice-rec 里的 LIMIT_GB 后
+  systemctl restart sipvoice-rec-cleanup.timer
+- **传真文件**：/data/fax（同理会绑定到 /var/spool/asterisk/fax）
+- **Asterisk 日志**：/etc/logrotate.d/asterisk 已配置为超过 **50M** 切分、压缩、
+  保留 5 份；messages.log 不会再无限增长
 ## 运维
 
 ```bash

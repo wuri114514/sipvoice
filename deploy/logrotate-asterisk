@@ -1,0 +1,19 @@
+# SIPVoice：Asterisk 日志按大小轮转，避免 messages.log 无限增长
+# 默认每天检查一次，单个文件超过 50M 就切，最多保留 5 份（压缩后约几十 MB）
+/var/log/asterisk/messages.log
+/var/log/asterisk/full
+/var/log/asterisk/debug
+/var/log/asterisk/queue_log
+/var/log/asterisk/security_log
+{
+    daily
+    size 50M
+    rotate 5
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    su asterisk asterisk
+    create 0640 asterisk asterisk
+}

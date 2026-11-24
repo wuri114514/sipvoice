@@ -182,6 +182,18 @@ docker run -d --name sipvoice \
 `SIPVOICE_WEB` overrides the console bind address (default `0.0.0.0:8080`). See
 [docs/DOCKER.md](docs/DOCKER.md) for details and troubleshooting.
 
+## Storage & logs
+
+- **Call recordings**: calls to 9000 are recorded into /var/spool/asterisk/monitor,
+  which is bind-mounted to the data disk at /data/recordings/monitor
+  (/var/lib/sipvoice/recordings when there is no separate data disk)
+- **Rolling retention**: a systemd timer checks every 5 minutes; once the recording
+  directory exceeds **5 GB** the oldest files are deleted until it drops below 90%.
+  Change the quota in /etc/default/sipvoice-rec (LIMIT_GB) and restart
+  sipvoice-rec-cleanup.timer
+- **Fax files**: /data/fax (bind-mounted to /var/spool/asterisk/fax)
+- **Asterisk logs**: /etc/logrotate.d/asterisk rotates at **50 MB**, compresses and
+  keeps 5 files — messages.log can no longer grow without bound
 ## Operations
 
 ```bash

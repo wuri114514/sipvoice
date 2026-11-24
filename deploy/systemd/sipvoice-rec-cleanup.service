@@ -1,0 +1,6 @@
+[Unit]
+Description=SIPVoice 录音滚动清理（默认 5G 上限）
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/sipvoice-rec-cleanup.sh

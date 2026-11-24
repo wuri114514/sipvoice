@@ -2,6 +2,15 @@
 
 本项目从"电话能打通"一路做到"可发布"，版本号按 **主.次.修订 b构建** 递增。
 
+## v1.3.3 — 存储与日志保留
+
+- 数据盘：自动识别 /data 挂载点，把录音、传真目录绑定过去（无数据盘时落在 /var/lib/sipvoice）
+- 通话录音：9000 加 MixMonitor，录音写入 monitor 目录
+- 滚动覆盖：systemd timer 每 5 分钟检查，录音目录超过 5G 删除最旧文件到 90%
+  额度可在 /etc/default/sipvoice-rec 调整
+- 日志轮转：/etc/logrotate.d/asterisk 改为按大小（50M）切分、压缩、保留 5 份，
+  解决 messages.log 无限增长
+- 安装脚本自动完成以上配置
 ## v1.3.2 — 稳定性修复（云主机实测）
 
 - 修复 AudioSocket 写帧拆包：头和负载合并为一次 write，
