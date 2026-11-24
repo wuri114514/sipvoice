@@ -28,7 +28,7 @@ import (
 	"sipvoice/internal/voice"
 )
 
-var version = "1.3.1"
+var version = "1.3.2"
 
 func main() {
 	var (

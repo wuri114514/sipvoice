@@ -2,6 +2,17 @@
 
 本项目从"电话能打通"一路做到"可发布"，版本号按 **主.次.修订 b构建** 递增。
 
+## v1.3.2 — 稳定性修复（云主机实测）
+
+- 修复 AudioSocket 写帧拆包：头和负载合并为一次 write，
+  解决 Asterisk 20.x 上"接通 0.6 秒就断、没有声音"的问题
+- 新增静音填充，保证连接上每 20ms 至少一帧
+- 打断增加 200ms 宽限，避免模型生成期间被环境音整轮取消
+- 拨号方案改用 uuidgen（Ubuntu 24.04 的 Asterisk 不带 func_uuid）
+- 拨号方案兼容客户端自动添加的 + 前缀
+- 600 传真去掉 faxdetect（明确收传真时反而会报 no fax extension）
+- 依赖增加 uuid-runtime
+
 ## v1.3.1 — 打包与分发
 
 - 新增 `.deb` 安装包（amd64 / arm64）：`scripts/build-deb.sh`，dpkg 管理依赖与卸载，postinst 负责建用户、部署 Asterisk 配置、启动服务
