@@ -91,6 +91,7 @@
   <button data-tab="ai">AI 服务</button>
   <button data-tab="voice">语音</button>
   <button data-tab="phones">话机</button>
+  <button data-tab="storage">存储</button>
   <button data-tab="system">系统</button>
 </nav>
 
@@ -308,6 +309,33 @@
     </div>
   </section>
 
+  <!-- 存储 -->
+  <section id="tab-storage">
+    <div class="panel">
+      <h2>录音与日志</h2>
+      <div class="grid">
+        <div class="field"><label>通话录音</label>
+          <select id="rec_on"><option value="true">开启</option><option value="false">关闭</option></select>
+        </div>
+        <div class="field"><label>录音目录</label><input id="rec_dir" placeholder="/data/recordings"></div>
+        <div class="field"><label>录音总量上限（GB）</label><input id="rec_quota" type="number" min="1" value="5"></div>
+        <div class="field"><label>单个日志上限（MB）</label><input id="log_max" type="number" min="5" value="50"></div>
+        <div class="field"><label>日志保留份数</label><input id="log_keep" type="number" min="1" value="5"></div>
+      </div>
+      <div class="row">
+        <button class="primary" id="storage-save">保存并应用</button>
+        <button class="ghost" id="storage-clean">立即清理录音</button>
+        <button class="ghost" id="storage-rotate">立即轮转日志</button>
+        <span class="msg" id="storage-msg"></span>
+      </div>
+      <div class="msg">超过上限时每 5 分钟自动从最旧的文件开始删除，清到 90% 停止；日志按大小切分并压缩。</div>
+    </div>
+    <div class="panel">
+      <h2>当前占用</h2>
+      <table><tbody id="storage-body"></tbody></table>
+      <div class="row"><button class="ghost" id="storage-refresh">刷新</button></div>
+    </div>
+  </section>
   <!-- 系统 -->
   <section id="tab-system">
     <div class="panel">
@@ -398,11 +426,59 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   if(b.dataset.tab==='models') loadModels();
   if(b.dataset.tab==='voice') loadModels();
   if(b.dataset.tab==='phones') loadPhones();
+  if(b.dataset.tab==='storage') loadStorage();
 });
 
 let cfg=null;
-async function loadConfig(){
-  cfg=await api('/api/config');
+// ---- 存储 ----
+function fmtBytes(n){
+  if(!n||n<0) return '0 B';
+  const u=['B','KB','MB','GB','TB'];let i=0,v=n;
+  while(v>=1024&&i<u.length-1){v/=1024;i++}
+  return v.toFixed(v<10?1:0)+' '+u[i];
+}
+function storageBody(){
+  return {
+    recording_enabled:$('rec_on').value==='true',
+    recording_dir:$('rec_dir').value.trim(),
+    recording_quota_gb:parseInt($('rec_quota').value)||5,
+    log_max_mb:parseInt($('log_max').value)||50,
+    log_keep:parseInt($('log_keep').value)||5
+  };
+}
+async function loadStorage(){
+  try{
+    const r=await api('/api/storage');
+    const c=r.config||{}, st=r.stats||{};
+    $('rec_on').value=String(c.recording_enabled!==false);
+    $('rec_dir').value=c.recording_dir||'';
+    $('rec_quota').value=c.recording_quota_gb||5;
+    $('log_max').value=c.log_max_mb||50;
+    $('log_keep').value=c.log_keep||5;
+    const pct=st.disk_total?Math.round(st.bytes*100/st.disk_total):0;
+    $('storage-body').innerHTML=
+      '<tr><th>录音目录</th><td>'+ (st.dir||'-') +'</td></tr>'+
+      '<tr><th>录音占用</th><td>'+ fmtBytes(st.bytes) +'（'+ (st.files||0) +' 个文件）</td></tr>'+
+      '<tr><th>Asterisk 日志</th><td>'+ fmtBytes(st.log_bytes) +'</td></tr>'+
+      '<tr><th>磁盘可用</th><td>'+ fmtBytes(st.disk_free) +' / '+ fmtBytes(st.disk_total) +'</td></tr>';
+  }catch(e){$('storage-msg').textContent='读取失败: '+e.message;$('storage-msg').style.color='var(--bad)'}
+}
+async function storagePost(action,msgEl,okText){
+  msgEl.textContent='处理中…';msgEl.style.color='';
+  try{
+    const url='/api/storage'+(action?('?action='+action):'');
+    const r=await api(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(storageBody())});
+    msgEl.textContent=(r&&r.ok)?(okText||'已保存'):('失败：'+((r&&r.message)||'未知错误'));
+    msgEl.style.color=(r&&r.ok)?'var(--ok)':'var(--bad)';
+    await loadStorage();
+  }catch(e){msgEl.textContent='失败: '+e.message;msgEl.style.color='var(--bad)'}
+}
+$('storage-save').onclick=()=>storagePost('', $('storage-msg'), '已保存并应用');
+$('storage-clean').onclick=()=>storagePost('clean', $('storage-msg'), '已清理');
+$('storage-rotate').onclick=()=>storagePost('rotate', $('storage-msg'), '已轮转日志');
+$('storage-refresh').onclick=()=>loadStorage();
+
+async function loadConfig(){  cfg=await api('/api/config');
   $('provider').value=cfg.ai.provider||guessProvider(cfg.ai.base_url)||'';
   $('asr_provider').value=cfg.ai.asr_provider||guessProvider(cfg.ai.asr_base_url||cfg.ai.base_url)||'';
   $('tts_provider').value=cfg.ai.tts_provider||guessProvider(cfg.ai.tts_base_url||cfg.ai.base_url)||'';

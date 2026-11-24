@@ -10,6 +10,9 @@
   额度可在 /etc/default/sipvoice-rec 调整
 - 日志轮转：/etc/logrotate.d/asterisk 改为按大小（50M）切分、压缩、保留 5 份，
   解决 messages.log 无限增长
+- **面板新增「存储」页**：录音开关、录音目录、5G 额度、日志上限/份数都可直接在面板修改，
+  带当前占用展示与「立即清理 / 立即轮转」按钮
+- 面板通过 AstDB（sipvoice/rec、sipvoice/rec_dir）控制拨号方案是否录音
 - 安装脚本自动完成以上配置
 ## v1.3.2 — 稳定性修复（云主机实测）
 

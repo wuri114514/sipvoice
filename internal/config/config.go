@@ -15,6 +15,7 @@ type Config struct {
 	Realtime RealtimeConfig `json:"realtime"`
 	Agent    AgentConfig    `json:"agent"`
 	Notify   NotifyConfig   `json:"notify"`
+	Storage  StorageConfig  `json:"storage"`
 }
 
 // RealtimeConfig 描述端到端语音模型（Qwen-Omni-Realtime 等）。
@@ -26,6 +27,15 @@ type RealtimeConfig struct {
 	Model        string `json:"model"`
 	Voice        string `json:"voice"`
 	Instructions string `json:"instructions"`
+}
+
+// StorageConfig 描述录音与日志的保留策略（面板可改）。
+type StorageConfig struct {
+	RecordingEnabled bool   `json:"recording_enabled"`
+	RecordingDir     string `json:"recording_dir"`
+	QuotaGB          int    `json:"recording_quota_gb"`
+	LogMaxMB         int    `json:"log_max_mb"`
+	LogKeep          int    `json:"log_keep"`
 }
 
 // NotifyConfig 描述 ServerChan 推送。
@@ -140,6 +150,13 @@ func Default() *Config {
 			OnError:       true,
 			OnDisk:        true,
 			OnCallEnd:     false,
+		},
+		Storage: StorageConfig{
+			RecordingEnabled: true,
+			RecordingDir:     "/data/recordings",
+			QuotaGB:          5,
+			LogMaxMB:         50,
+			LogKeep:          5,
 		},
 		Agent: AgentConfig{
 			Greeting:            "您好，请问有什么可以帮您？",

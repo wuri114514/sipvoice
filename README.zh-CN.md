@@ -178,14 +178,22 @@ docker run -d --name sipvoice \
 
 ## 存储与日志
 
-- **通话录音**：9000 的通话录音写到 /var/spool/asterisk/monitor，实际落在数据盘
-  /data/recordings/monitor（没有独立数据盘时用 /var/lib/sipvoice/recordings）
-- **滚动覆盖**：定时器每 5 分钟检查一次，录音目录超过 **5G** 就从最旧的文件开始删，
-  清到 90% 以下停止。改额度：编辑 /etc/default/sipvoice-rec 里的 LIMIT_GB 后
-  systemctl restart sipvoice-rec-cleanup.timer
-- **传真文件**：/data/fax（同理会绑定到 /var/spool/asterisk/fax）
-- **Asterisk 日志**：/etc/logrotate.d/asterisk 已配置为超过 **50M** 切分、压缩、
-  保留 5 份；messages.log 不会再无限增长
+面板「存储」页可以直接改这些设置，改完点「保存并应用」即可生效（不用登服务器）：
+
+| 设置项 | 说明 |
+|---|---|
+| 通话录音 | 开关。关掉后 9000 不再录音 |
+| 录音目录 | 录音存放路径，默认数据盘 /data/recordings/monitor |
+| 录音总量上限 | 默认 **5G**，超过后每 5 分钟从最旧的文件开始删，清到 90% 停止 |
+| 单个日志上限 | 默认 **50M**，超过就切分 |
+| 日志保留份数 | 默认 5 份，压缩后占用很小 |
+
+页面上还会显示当前占用：录音文件数/大小、Asterisk 日志大小、磁盘可用空间，并提供
+「立即清理录音」「立即轮转日志」两个按钮。
+
+实现方式：面板把开关和目录写入 Asterisk AstDB（sipvoice/rec、sipvoice/rec_dir），
+拨号方案在通话开始时读取；额度与日志规则写入 /etc/default/sipvoice-rec 和
+/etc/logrotate.d/asterisk。没有独立数据盘时，录音落在 /var/lib/sipvoice/recordings。
 ## 运维
 
 ```bash

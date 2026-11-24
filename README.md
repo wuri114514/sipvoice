@@ -184,16 +184,23 @@ docker run -d --name sipvoice \
 
 ## Storage & logs
 
-- **Call recordings**: calls to 9000 are recorded into /var/spool/asterisk/monitor,
-  which is bind-mounted to the data disk at /data/recordings/monitor
-  (/var/lib/sipvoice/recordings when there is no separate data disk)
-- **Rolling retention**: a systemd timer checks every 5 minutes; once the recording
-  directory exceeds **5 GB** the oldest files are deleted until it drops below 90%.
-  Change the quota in /etc/default/sipvoice-rec (LIMIT_GB) and restart
-  sipvoice-rec-cleanup.timer
-- **Fax files**: /data/fax (bind-mounted to /var/spool/asterisk/fax)
-- **Asterisk logs**: /etc/logrotate.d/asterisk rotates at **50 MB**, compresses and
-  keeps 5 files — messages.log can no longer grow without bound
+The **Storage** tab in the console controls all of this — no server access needed:
+
+| Setting | Meaning |
+|---|---|
+| Call recording | on/off; when off, extension 9000 stops recording |
+| Recording directory | where recordings go (default /data/recordings/monitor) |
+| Recording quota | default **5 GB**; every 5 minutes the oldest files are deleted until usage drops below 90% |
+| Log size limit | default **50 MB** per file |
+| Log files kept | default 5, compressed |
+
+The page also shows current usage (file count/size, log size, free disk) and offers
+**Clean now** / **Rotate now** buttons.
+
+Under the hood the console stores the switch and path in Asterisk's AstDB
+(sipvoice/rec, sipvoice/rec_dir), which the dialplan reads per call, and writes the
+quota/rotation rules to /etc/default/sipvoice-rec and /etc/logrotate.d/asterisk.
+Without a separate data disk, recordings live under /var/lib/sipvoice/recordings.
 ## Operations
 
 ```bash

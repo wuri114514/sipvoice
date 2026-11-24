@@ -18,7 +18,7 @@ StandardError=journal
 # 基础加固
 PrivateTmp=yes
 ProtectSystem=full
-ReadWritePaths=/etc/sipvoice /opt/sipvoice/models /etc/asterisk
+ReadWritePaths=/etc/sipvoice /opt/sipvoice/models /etc/asterisk /etc/default /etc/logrotate.d /data /var/log/asterisk /var/spool/asterisk
 ProtectHome=yes
 
 [Install]

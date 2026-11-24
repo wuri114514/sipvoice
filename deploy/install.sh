@@ -85,6 +85,10 @@ if ! id sipvoice >/dev/null 2>&1; then
     useradd --system --no-create-home --shell /usr/sbin/nologin sipvoice
     log "已创建系统用户 sipvoice"
 fi
+# 面板需要读 Asterisk 写的录音文件（属于 asterisk 组）
+if getent group asterisk >/dev/null 2>&1; then
+    usermod -aG asterisk sipvoice 2>/dev/null || true
+fi
 install -d -m 755 "$APP"
 install -d -m 755 "$MODELS"
 install -d -m 770 -o root -g sipvoice "$ETC"
@@ -181,6 +185,7 @@ DROPIN
 
     # 滚动清理：每 5 分钟检查一次，超上限删最旧的
     install -m 755 "$SRC/sipvoice-rec-cleanup.sh" /usr/local/sbin/sipvoice-rec-cleanup.sh
+    install -m 755 "$SRC/sipvoice-storage-apply.sh" /usr/local/sbin/sipvoice-storage-apply.sh
     install -m 644 "$SRC/systemd/sipvoice-rec-cleanup.service" /etc/systemd/system/
     install -m 644 "$SRC/systemd/sipvoice-rec-cleanup.timer" /etc/systemd/system/
     cat > /etc/default/sipvoice-rec <<EOF
@@ -188,10 +193,15 @@ DROPIN
 DIR=$REC_DIR
 LIMIT_GB=${REC_LIMIT_GB:-5}
 TARGET_PERCENT=90
+REC=1
 EOF
     systemctl daemon-reload
     systemctl enable --now sipvoice-rec-cleanup.timer >/dev/null 2>&1 || true
     log "录音清理定时器已启用（每 5 分钟）"
+
+    # 面板可改录音开关/路径/额度与日志策略，初始化 AstDB 供拨号方案读取
+    asterisk -rx "database put sipvoice rec 1" >/dev/null 2>&1 || true
+    asterisk -rx "database put sipvoice rec_dir $REC_DIR/monitor" >/dev/null 2>&1 || true
 
     # 日志按大小轮转，防止 messages.log 无限增长
     install -m 644 "$SRC/logrotate-asterisk" /etc/logrotate.d/asterisk
@@ -225,6 +235,7 @@ fi
 # ---------- 6. 权限与 systemd ----------
 cat > /etc/sudoers.d/sipvoice-asterisk <<'SUDOERS'
 sipvoice ALL=(root) NOPASSWD: /usr/sbin/asterisk
+sipvoice ALL=(root) NOPASSWD: /usr/local/sbin/sipvoice-storage-apply.sh
 SUDOERS
 chmod 440 /etc/sudoers.d/sipvoice-asterisk
 

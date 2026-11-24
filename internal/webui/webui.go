@@ -186,6 +186,7 @@ func Start(opt Options) *Server {
 	mux.HandleFunc("/api/tls/upload", s.handleTLSUpload)
 	mux.HandleFunc("/api/phones", s.handlePhones)
 	mux.HandleFunc("/api/phones/template", s.handlePhoneTemplate)
+	mux.HandleFunc("/api/storage", s.handleStorage)
 	s.handler = s.withAuth(mux)
 	go s.listen()
 	return s
