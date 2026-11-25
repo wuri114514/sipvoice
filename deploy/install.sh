@@ -94,9 +94,17 @@ if ! id sipvoice >/dev/null 2>&1; then
     useradd --system --no-create-home --shell /usr/sbin/nologin sipvoice
     log "已创建系统用户 sipvoice"
 fi
-# 面板需要读 Asterisk 写的录音文件（属于 asterisk 组）
+# 面板需要读 Asterisk 写的录音与传真文件（属于 asterisk 组）
 if getent group asterisk >/dev/null 2>&1; then
     usermod -aG asterisk sipvoice 2>/dev/null || true
+    # /var/spool/asterisk 的组若是 root，sipvoice 即使加入了 asterisk 组也进不去
+    # （缺 x 位会导致面板读传真时报 permission denied）
+    if [ -d /var/spool/asterisk ]; then
+        if [ "$(stat -c '%G' /var/spool/asterisk)" != "asterisk" ]; then
+            chgrp asterisk /var/spool/asterisk 2>/dev/null || true
+        fi
+        chmod g+rx /var/spool/asterisk 2>/dev/null || true
+    fi
 fi
 install -d -m 755 "$APP"
 install -d -m 755 "$MODELS"
@@ -243,6 +251,9 @@ DROPIN
     # ---------- 5.1 存储与日志保留 ----------
     # REC_DIR / FAX_DIR 已在第 4 步按是否有独立数据盘算好
     install -d -m 750 -o asterisk -g asterisk "$REC_DIR" "$REC_DIR/monitor" "$FAX_DIR"
+    # 让面板（sipvoice 用户）能读这些目录：组写权限不需要，读+进入即可
+    chgrp -R asterisk "$REC_DIR" "$FAX_DIR" 2>/dev/null || true
+    chmod -R g+rX "$REC_DIR" "$FAX_DIR" 2>/dev/null || true
     log "录音目录：$REC_DIR（上限 ${REC_LIMIT_GB:-5}G，滚动覆盖）"
 
     # 把 Asterisk 的 monitor / fax 目录绑到存储目录（重启后由 fstab 兜底）
