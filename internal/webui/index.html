@@ -127,6 +127,7 @@
   <section id="tab-models">
     <div class="panel">
       <h2>本地语音模型（whisper.cpp 等）</h2>
+      <div class="row" style="margin-top:0"><button class="ghost" id="refresh-models">刷新列表</button><span class="msg" id="models-msg"></span></div>
       <div class="msg" id="model-dir"></div>
       <table><thead><tr><th>模型</th><th>大小</th><th>状态</th><th>操作</th></tr></thead><tbody id="model-body"></tbody></table>
       <div class="row">
@@ -152,7 +153,7 @@
           <select id="vision_enabled"><option value="false">关闭</option><option value="true">开启</option></select>
         </div>
       </div>
-      <div class="row"><button class="primary" id="mode-save">保存工作模式</button><span class="msg" id="mode-msg"></span></div>
+      <div class="row"><button class="primary" id="mode-save">保存</button><span class="msg" id="mode-msg"></span></div>
       <div class="msg">
         三步走模式使用独立的 ASR / TTS 服务；端到端语音模式直接由语音模型处理音频，ASR / TTS 设置会隐藏。<br>
         「模型支持视觉功能」打开后会显示传真联动、自动回拨等入口；关闭时相关功能一并禁用。
@@ -165,6 +166,7 @@
         <div class="field"><label>对话服务商</label><select id="provider"></select></div>
         <div class="field"><label>说明</label><div class="msg" id="provider-note" style="margin-top:2px"></div></div>
       </div>
+      <div class="row"><button class="primary" id="save-provider">保存</button><span class="msg" id="provider-msg"></span></div>
     </div>
     <div class="panel" data-mode="staged-only">
       <h2>对话模型（OpenAI 兼容）</h2>
@@ -239,7 +241,7 @@
         </div>
         <div class="field"><label>AudioSocket 监听</label><input id="audio_listen"></div>
       </div>
-      <div class="row"><button class="primary" id="save-voice">保存语音配置</button><span class="msg" id="voice-msg"></span></div>
+      <div class="row"><button class="primary" id="save-voice">保存</button><span class="msg" id="voice-msg"></span></div>
     </div>
 <div class="panel">
       <h2>处理提示音 & 按键控制</h2>
@@ -254,6 +256,7 @@
         <div class="field"><label>打断键</label><input id="dtmf_interrupt" maxlength="1"></div>
         <div class="field"><label>挂断键</label><input id="dtmf_hangup" maxlength="1"></div>
       </div>
+      <div class="row"><button class="primary" id="save-tone">保存</button><span class="msg" id="tone-msg"></span></div>
     </div>
     <div class="panel">
       <h2>说明</h2>
@@ -279,7 +282,7 @@
         </div>
         <div class="field"><label>回拨延迟（秒）</label><input id="sess_delay" type="number" min="0" max="600" value="10"></div>
       </div>
-      <div class="row"><button class="primary" id="sess-save">保存会话设置</button><span class="msg" id="sess-msg"></span></div>
+      <div class="row"><button class="primary" id="sess-save">保存</button><span class="msg" id="sess-msg"></span></div>
       <div class="msg">同一主叫号码在保留期内再次来电，AI 会记得之前的对话；也用于 AI 出图后发传真、发完传真回拨继续沟通。</div>
     </div>
     <div class="panel">
@@ -304,7 +307,7 @@
           <input id="play_buf" type="range" min="0" max="800" step="20" value="300"
                  style="width:100%"></div>
       </div>
-      <div class="row"><button class="primary" id="call-save">保存通话设置</button><span class="msg" id="call-msg"></span></div>
+      <div class="row"><button class="primary" id="call-save">保存</button><span class="msg" id="call-msg"></span></div>
       <div class="msg">「问候后继续收音」：用户抢在问候语刚播完时说话，开头几个字被 ASR 丢掉，这段作为预录并入第一句（默认 1000 毫秒）。<br>「滴声对齐」：问候语后播「请在滴声之后开始说话」+ 滴一声，给用户和 VAD 一个明确起点。<b>免提通话建议开启</b>。<br>「滴声后屏蔽期」：滴完之后这段时间收到的声音不计入"用户开口"，用来吃掉扬声器余响，避免 AI 被自己的声音触发。免提回声大的环境可调到 500~800 毫秒。<br><b>「播放预灌缓冲」</b>：播放前先把这么多音频推给对端，避免软电话的抖动缓冲欠载断流——断流的听感就是吞字、像嗓子里卡了东西。默认 300 毫秒；如果还是断续可以加到 500。</div>
     </div>
     <div class="panel" data-mode="vision-only">
@@ -345,6 +348,8 @@
         <div class="field wide"><label>模型路径</label><input id="asr_model_path"></div>
         <div class="field"><label>语言</label><input id="asr_lang" placeholder="zh"></div>
       </div>
+    
+      <div class="row"><button class="primary" id="save-asr">保存</button><span class="msg" id="asr-msg"></span></div>
     </div>
     <div class="panel" data-mode="staged-only">
       <h2>语音合成（TTS）</h2>
@@ -368,6 +373,8 @@
         <div class="field wide"><label>或手动填写模型名</label><input id="tts_model_cloud" placeholder="FunAudioLLM/CosyVoice2-0.5B"></div>
         </div>
       </div>
+    
+      <div class="row"><button class="primary" id="save-tts">保存</button><span class="msg" id="tts-msg"></span></div>
     </div>
 <div class="panel" data-mode="realtime-only">
       <h2>端到端语音（实验：直接音频进、音频出）</h2>
@@ -414,8 +421,10 @@
       </div>
       <div class="row">
         <button class="primary" id="btn-test-asr">开始识别</button>
+        <button class="ghost" id="gen-std-tts">生成标准测试语音</button>
         <span class="msg" id="asr-test-msg"></span>
       </div>
+      <div class="msg">「生成标准测试语音」会用当前 TTS 合成一段固定文本，识别结果应与之逐字一致——用来验证 ASR 接口是否配好。</div>
     </div>
     
     
@@ -425,6 +434,7 @@
   <section id="tab-phones">
     <div class="panel">
       <h2>话机台账与注册状态</h2>
+      <div class="row" style="margin-top:0"><button class="primary" id="apply-phones">重新应用全部话机</button><span class="msg" id="phones-msg"></span></div>
       <table><thead><tr><th>号码</th><th>名称</th><th>注册</th><th>IP</th><th>互播</th><th>摘机直通</th><th>操作</th></tr></thead><tbody id="phone-body"></tbody></table>
       <div class="row"><button class="ghost" id="phone-refresh">刷新注册状态</button><span class="msg" id="phone-msg"></span></div>
     </div>
@@ -480,6 +490,7 @@
 
     <div class="panel">
       <h2>发送失败的传真</h2>
+      <div class="row" style="margin-top:0"><button class="ghost" id="refresh-failed">刷新</button><span class="msg" id="failed-msg"></span></div>
       <table><thead><tr><th>文件名</th><th>时间</th><th>大小</th><th>操作</th></tr></thead><tbody id="fax-failed-body"></tbody></table>
     </div>
 
@@ -516,7 +527,7 @@
         </div>
         <div class="field"><label>收件人（留空用全局默认；可用 {number} 替换号码）</label><input id="fax_mail_to" placeholder="you@example.com"></div>
       </div>
-      <div class="row"><button class="primary" id="fax-save2">保存此部分</button><span class="msg" id="fax-msg2"></span></div>
+      <div class="row"><button class="primary" id="fax-save2">保存</button><span class="msg" id="fax-msg2"></span></div>
       <div class="msg">用户按键拒绝或呼叫失败时，传真会移到失败目录，并按下面的邮局设置发邮件（TIFF 自动转 PDF 附件）。</div>
     </div>
 
@@ -591,7 +602,7 @@
         <textarea id="notify_mail_body" rows="5" placeholder="{title}&#10;&#10;{body}&#10;&#10;时间：{time}&#10;主机：{host}"></textarea>
       </div>
       <div class="row">
-        <button class="primary" id="notify-save">保存并启用</button>
+        <button class="primary" id="notify-save">保存</button>
         <button class="ghost" id="notify-test">发送测试推送</button>
         <span class="msg" id="notify-msg"></span>
       </div>
@@ -630,7 +641,7 @@
         <div class="field"><label>授权码（*** 表示不修改）</label><input id="mail_b_pass" type="password" placeholder="留空保持不变"></div>
       </div>
       <div class="row">
-        <button class="primary" id="mail-save">保存邮局</button>
+        <button class="primary" id="mail-save">保存</button>
         <button class="ghost" id="mail-test">发送测试邮件</button>
         <span class="msg" id="mail-msg"></span>
       </div>
@@ -641,6 +652,7 @@
     </div>
     <div class="panel">
       <h2>登录防护</h2>
+      <div class="row" style="margin-top:0"><button class="primary" id="unblock-all">解除全部封锁</button><span class="msg" id="sec-msg"></span></div>
       <table><tbody id="sec-body"></tbody></table>
       <div class="row"><button class="ghost" id="sec-refresh">刷新</button><span class="msg" id="sec-msg"></span></div>
       <div class="msg">同一 IP 在 10 分钟内失败 5 次会被封禁 10 分钟；封禁期间登录直接拒绝。下面可以手动解封。</div>
@@ -1246,6 +1258,81 @@ if($('rt2-save')) $('rt2-save').onclick = async () => {
 if($('rt2-fetch')) $('rt2-fetch').onclick = () => { if($('rt-fetch')) $('rt-fetch').click(); };
 if($('rt2-test')) $('rt2-test').onclick = () => { if($('rt-test')) $('rt-test').click(); };
 
+
+// ---- 各面板的刷新/应用按钮 ----
+if($('refresh-models')) $('refresh-models').onclick=()=>{
+  $('models-msg').textContent='刷新中…';
+  loadModels().then(()=>{ $('models-msg').textContent='已刷新'; $('models-msg').style.color='var(--ok)'; })
+    .catch(e=>{ $('models-msg').textContent='刷新失败: '+e.message; $('models-msg').style.color='var(--bad)'; });
+};
+
+if($('apply-phones')) $('apply-phones').onclick=async()=>{
+  $('phones-msg').textContent='应用中…';
+  try{
+    const r=await api('/api/phones',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'apply'})});
+    $('phones-msg').textContent=r.ok?'已重新应用':'应用失败';
+    $('phones-msg').style.color=r.ok?'var(--ok)':'var(--bad)';
+    loadPhones();
+  }catch(e){$('phones-msg').textContent='应用失败: '+e.message;$('phones-msg').style.color='var(--bad)'}
+};
+
+if($('refresh-failed')) $('refresh-failed').onclick=()=>{
+  $('failed-msg').textContent='刷新中…';
+  loadFax().then(()=>{ $('failed-msg').textContent='已刷新'; $('failed-msg').style.color='var(--ok)'; })
+    .catch(e=>{ $('failed-msg').textContent='刷新失败: '+e.message; $('failed-msg').style.color='var(--bad)'; });
+};
+
+if($('unblock-all')) $('unblock-all').onclick=async()=>{
+  $('sec-msg').textContent='处理中…';
+  try{
+    const r=await api('/api/security',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'unblockall'})});
+    $('sec-msg').textContent=r.ok?'已解除全部封锁':'操作失败';
+    $('sec-msg').style.color=r.ok?'var(--ok)':'var(--bad)';
+    if(typeof loadSecurity==='function') loadSecurity();
+  }catch(e){$('sec-msg').textContent='失败: '+e.message;$('sec-msg').style.color='var(--bad)'}
+};
+
+
+// ---- 生成标准测试语音并识别（验证 ASR 配置） ----
+const STD_TEXT = "现在开始语音识别测试。这句话是由语音合成模型生成的，如果识别结果与它一致，说明接口配置正确。";
+if($('gen-std-tts')) $('gen-std-tts').onclick = async () => {
+  const msg = $('asr-test-msg');
+  msg.textContent = '合成中…'; msg.style.color = '';
+  $('asr-test-text').value = '';
+  try {
+    const r = await api('/api/test/tts', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({text: STD_TEXT})
+    });
+    if(!r.ok){ msg.textContent = '合成失败: ' + (r.error||''); msg.style.color='var(--bad)'; return; }
+    // 把 base64 转成 File 塞进 file input 的兄弟位置，直接走识别
+    const bin = atob(r.audio);
+    const buf = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) buf[i]=bin.charCodeAt(i);
+    const blob = new Blob([buf], {type:'audio/mpeg'});
+    msg.textContent = '合成完成，正在识别…';
+    const fd = new FormData();
+    fd.append('file', blob, 'std-test.mp3');
+    const resp = await fetch('/api/test/asr', {method:'POST', body: fd});
+    const ar = await resp.json();
+    if(ar.ok){
+      $('asr-test-text').value = ar.text || '';
+      const expect = STD_TEXT.replace(/[，。！？、\s]/g,'');
+      const got = (ar.text||'').replace(/[，。！？、\s]/g,'');
+      if(got === expect){
+        msg.textContent = '✅ 完全一致，ASR 配置正确';
+        msg.style.color = 'var(--ok)';
+      }else{
+        msg.textContent = '⚠️ 识别有出入（原句 ' + expect.length + ' 字，识别 ' + got.length + ' 字）';
+        msg.style.color = 'var(--warn)';
+      }
+    }else{
+      msg.textContent = '识别失败: ' + (ar.error||'');
+      msg.style.color = 'var(--bad)';
+    }
+  } catch(e){ msg.textContent = '失败: ' + e.message; msg.style.color='var(--bad)'; }
+};
+
 async function loadConfig(){
   cfg=await api('/api/config');
   $('provider').value=cfg.ai.provider||guessProvider(cfg.ai.base_url)||'';
@@ -1391,6 +1478,9 @@ function payload(){
       mail_body:$('notify_mail_body')?$('notify_mail_body').value:''
     }
   };
+
+  // 按当前工作模式显隐面板（页面加载时就生效，不等用户点保存）
+  applyMode(cfg);
 }
 
 async function saveConfig(msgEl){
@@ -1403,6 +1493,10 @@ async function saveConfig(msgEl){
 }
 $('save-ai').onclick=()=>saveConfig($('ai-msg'));
 $('save-voice').onclick=()=>saveConfig($('voice-msg'));
+$('save-tone').onclick=()=>saveConfig($('tone-msg'));
+$('save-provider').onclick=()=>saveConfig($('provider-msg'));
+$('save-asr').onclick=()=>saveConfig($('asr-msg'));
+$('save-tts').onclick=()=>saveConfig($('tts-msg'));
 $('test-ai').onclick=async()=>{
   $('ai-msg').textContent='测试中…';
   try{
