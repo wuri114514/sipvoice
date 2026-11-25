@@ -10,7 +10,7 @@ import (
 )
 
 // 全局默认收件人：分机没填邮箱时用这个
-const DefaultNotifyTo = "you@example.com"
+const DefaultNotifyTo = ""
 
 // Store 保存邮件配置（主 + 备用）。
 type Store struct {
