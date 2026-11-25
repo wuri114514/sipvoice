@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"sipvoice/internal/aibuild"
 	"sipvoice/internal/adapters"
+	"sipvoice/internal/aibuild"
 	"sipvoice/internal/config"
 	"sipvoice/internal/media"
 	"sipvoice/internal/providers"
@@ -39,14 +39,23 @@ func (s *Server) handleRemoteModels(w http.ResponseWriter, r *http.Request) {
 	if base == "" {
 		base = cfg.AI.BaseURL
 	}
+	// 取 key 的优先级：显式传入 > 该服务商历史保存的 key > 主 key
 	if key == "" || key == "***" {
-		switch q.Get("field") {
-		case "asr":
-			key = firstNonEmpty(cfg.AI.ASRKey, cfg.AI.APIKey)
-		case "tts":
-			key = firstNonEmpty(cfg.AI.TTSKey, cfg.AI.APIKey)
-		default:
-			key = firstNonEmpty(cfg.AI.APIKey, cfg.AI.ASRKey)
+		pid := q.Get("provider")
+		if pid != "" && cfg.AI.ProviderKeys != nil {
+			if v := strings.TrimSpace(cfg.AI.ProviderKeys[pid]); v != "" {
+				key = v
+			}
+		}
+		if key == "" || key == "***" {
+			switch q.Get("field") {
+			case "asr":
+				key = firstNonEmpty(cfg.AI.ASRKey, cfg.AI.APIKey)
+			case "tts":
+				key = firstNonEmpty(cfg.AI.TTSKey, cfg.AI.APIKey)
+			default:
+				key = firstNonEmpty(cfg.AI.APIKey, cfg.AI.ASRKey)
+			}
 		}
 	}
 	if protocol == "" {

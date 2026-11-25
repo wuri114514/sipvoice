@@ -19,3 +19,9 @@ Thumbs.db
 *.zip
 *.tar.gz
 *.exe
+
+# 编译产物
+/voicebridge
+/dist/
+/voicebridge-linux-*
+*.exe

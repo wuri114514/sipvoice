@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
 )
 
 func (s *Server) handleUsers(w http.ResponseWriter, r *http.Request) {

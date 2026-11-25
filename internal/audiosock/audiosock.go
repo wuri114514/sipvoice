@@ -12,6 +12,9 @@ import (
 	"io"
 	"log"
 	"net"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -65,10 +68,12 @@ func WriteFrame(w io.Writer, typ byte, payload []byte) error {
 
 // Conn 是一通电话的 AudioSocket 连接。
 type Conn struct {
-	UUID  string
-	Start time.Time
-	rw    net.Conn
-	mu    sync.Mutex
+	UUID string
+	// Caller 是主叫号码（来自 Asterisk 的 CALLERID），用于按号码归并会话
+	Caller string
+	Start  time.Time
+	rw     net.Conn
+	mu     sync.Mutex
 
 	FramesIn  int64
 	FramesOut int64
@@ -169,7 +174,12 @@ func serveConn(ctx context.Context, conn net.Conn, h Handler) {
 	_ = conn.SetReadDeadline(time.Time{})
 
 	c := &Conn{UUID: FormatUUID(fr.Payload), Start: time.Now(), rw: conn}
-	log.Printf("[audiosock] 来电建立 uuid=%s from=%s", c.UUID, conn.RemoteAddr())
+
+	// 主叫号码：拨号方案在调用 AudioSocket 之前把 "uuid -> 号码" 写到 callmap 目录，
+	// 这里按 UUID 读出来。读不到就用空（会话功能自动降级）。
+	c.Caller = lookupCaller(c.UUID)
+
+	log.Printf("[audiosock] 来电建立 uuid=%s caller=%q from=%s", c.UUID, c.Caller, conn.RemoteAddr())
 	defer func() {
 		log.Printf("[audiosock] 通话结束 uuid=%s 时长=%s 收=%d帧/%dB 发=%d帧/%dB",
 			c.UUID, time.Since(c.Start).Round(time.Millisecond), c.FramesIn, c.BytesIn, c.FramesOut, c.BytesOut)
@@ -183,4 +193,34 @@ func serveConn(ctx context.Context, conn net.Conn, h Handler) {
 // FormatUUID 把 16 字节二进制 UUID 转成标准字符串。
 func FormatUUID(b []byte) string {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
+
+// CallmapDir 存放 uuid -> 主叫号码 的映射文件，由拨号方案写入。
+const CallmapDir = "/var/lib/sipvoice/callmap"
+
+// lookupCaller 按 UUID 读取主叫号码，读完即删。
+func lookupCaller(uuid string) string {
+	if uuid == "" {
+		return ""
+	}
+	p := filepath.Join(CallmapDir, uuid)
+	raw, err := os.ReadFile(p)
+	if err != nil {
+		return ""
+	}
+	_ = os.Remove(p)
+	return strings.TrimSpace(string(raw))
+}
+
+// IsFlagged 检查并清除某次通话的特殊标记（如 AI 回拨的 "callback"）。
+func IsFlagged(uuid string) bool {
+	if uuid == "" {
+		return false
+	}
+	p := filepath.Join(CallmapDir, uuid+".flag")
+	if _, err := os.Stat(p); err != nil {
+		return false
+	}
+	_ = os.Remove(p)
+	return true
 }

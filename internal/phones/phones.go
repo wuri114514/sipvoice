@@ -22,6 +22,8 @@ type Phone struct {
 	AllowIntercall bool   `json:"allow_intercall"`
 	Hotline        string `json:"hotline"`
 	Note           string `json:"note"`
+	// Email 是该分机的收件邮箱：传真发不出去时优先发到这里，留空用全局默认
+	Email string `json:"email"`
 }
 
 // Store 管理话机台账文件。
@@ -168,7 +170,14 @@ func (s *Store) RenderExtensions() string {
 	b.WriteString(" same => n(ai),AudioSocket(${SHELL(uuidgen | tr -d '\\n')},127.0.0.1:9092)\n")
 	b.WriteString(" same => n,Hangup()\n")
 	b.WriteString("exten => _+X.,1,Set(NUM=${EXTEN:1})\n same => n,Goto(internal,${NUM},1)\n")
-	b.WriteString("exten => 600,1,NoOp(fax receive)\n same => n,Answer()\n same => n,Wait(1)\n same => n,ReceiveFAX(/var/spool/asterisk/fax/${STRFTIME(${EPOCH},,%Y%m%d-%H%M%S)}.tiff)\n same => n,Hangup()\n")
+	b.WriteString("exten => 600,1,NoOp(SIPVoice fax receive, caller=${CALLERID(num)})\n")
+	b.WriteString(" same => n,Answer()\n")
+	b.WriteString(" same => n,Wait(1)\n")
+	b.WriteString(" same => n,Set(FAXOPT(ecm)=no)\n")
+	b.WriteString(" same => n,ReceiveFAX(/var/spool/asterisk/fax/${STRFTIME(${EPOCH},,%Y%m%d-%H%M%S)}.tiff)\n")
+	b.WriteString(" same => n,NoOp(传真结果=${FAXOPT(status)} 页数=${FAXOPT(pages)})\n")
+	b.WriteString(" same => n,Wait(3)\n")
+	b.WriteString(" same => n,Hangup()\n")
 	b.WriteString("exten => _X.,1,Congestion()\n\n")
 
 	for _, p := range all {

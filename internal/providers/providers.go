@@ -24,7 +24,9 @@ type Preset struct {
 	Voices     []string `json:"voices,omitempty"`
 
 	KeyURL string `json:"key_url,omitempty"`
-	Note   string `json:"note,omitempty"`
+	// ModelsURL 是该平台的模型选择/指引页面（面板上显示为"查看可用模型"链接）
+	ModelsURL string `json:"models_url,omitempty"`
+	Note      string `json:"note,omitempty"`
 }
 
 var presets = []Preset{
@@ -37,8 +39,9 @@ var presets = []Preset{
 			"deepseek-flash",
 			"deepseek-v4-pro",
 		},
-		KeyURL: "https://platform.deepseek.com/api_keys",
-		Note:   "仅提供对话模型；语音识别/合成需另配服务商。",
+		KeyURL:    "https://platform.deepseek.com/api_keys",
+		ModelsURL: "https://platform.deepseek.com/api-docs/pricing",
+		Note:      "仅提供对话模型；语音识别/合成需另配服务商。",
 	},
 	{
 		ID:      "siliconflow",
@@ -70,7 +73,8 @@ var presets = []Preset{
 			"FunAudioLLM/CosyVoice2-0.5B:david",
 			"FunAudioLLM/CosyVoice2-0.5B:diana",
 		},
-		KeyURL: "https://cloud.siliconflow.cn/account/ak",
+		KeyURL:    "https://cloud.siliconflow.cn/account/ak",
+		ModelsURL: "https://cloud.siliconflow.cn/models",
 	},
 	{
 		ID:      "dashscope",
@@ -83,8 +87,9 @@ var presets = []Preset{
 			"qwen-turbo",
 			"qwen-long",
 		},
-		KeyURL: "https://bailian.console.aliyun.com/?apiKey=1",
-		Note:   "兼容模式只支持对话；语音识别/合成需走 DashScope 原生接口。",
+		KeyURL:    "https://bailian.console.aliyun.com/?apiKey=1",
+		ModelsURL: "https://help.aliyun.com/zh/model-studio/models",
+		Note:      "兼容模式只支持对话；语音识别/合成需走 DashScope 原生接口。",
 	},
 	{
 		ID:         "openai",
@@ -98,6 +103,7 @@ var presets = []Preset{
 		TTSModels:  []string{"tts-1", "tts-1-hd", "gpt-4o-mini-tts"},
 		Voices:     []string{"alloy", "echo", "fable", "onyx", "nova", "shimmer"},
 		KeyURL:     "https://platform.openai.com/api-keys",
+		ModelsURL:  "https://platform.openai.com/docs/models",
 	},
 	{
 		ID:         "groq",
@@ -108,6 +114,7 @@ var presets = []Preset{
 		ChatModels: []string{"llama-3.3-70b-versatile", "llama-3.1-8b-instant"},
 		ASRModels:  []string{"whisper-large-v3-turbo", "whisper-large-v3"},
 		KeyURL:     "https://console.groq.com/keys",
+		ModelsURL:  "https://console.groq.com/docs/models",
 		Note:       "识别速度极快、价格低，适合电话场景。",
 	},
 	{
@@ -117,6 +124,7 @@ var presets = []Preset{
 		Chat:       true,
 		ChatModels: []string{"glm-4-flash", "glm-4-plus", "glm-4-air"},
 		KeyURL:     "https://bigmodel.cn/usercenter/apikeys",
+		ModelsURL:  "https://open.bigmodel.cn/dev/howuse/model",
 	},
 	{
 		ID:         "moonshot",
@@ -125,6 +133,7 @@ var presets = []Preset{
 		Chat:       true,
 		ChatModels: []string{"moonshot-v1-8k", "moonshot-v1-32k", "kimi-latest"},
 		KeyURL:     "https://platform.moonshot.cn/console/api-keys",
+		ModelsURL:  "https://platform.moonshot.cn/docs/intro",
 	},
 	{
 		ID:         "hunyuan",
@@ -133,6 +142,7 @@ var presets = []Preset{
 		Chat:       true,
 		ChatModels: []string{"hunyuan-turbo", "hunyuan-large", "hunyuan-standard"},
 		KeyURL:     "https://console.cloud.tencent.com/hunyuan/api-key",
+		ModelsURL:  "https://cloud.tencent.com/document/product/1729/104753",
 	},
 	{
 		ID:      "ark",
@@ -143,8 +153,9 @@ var presets = []Preset{
 			"doubao-pro-32k",
 			"doubao-lite-32k",
 		},
-		KeyURL: "https://console.volcengine.com/ark",
-		Note:   "模型名也可填推理接入点 ID（ep-xxxxxxxx）。",
+		KeyURL:    "https://console.volcengine.com/ark",
+		ModelsURL: "https://www.volcengine.com/docs/82379/1330310",
+		Note:      "模型名也可填推理接入点 ID（ep-xxxxxxxx）。",
 	},
 	{
 		ID:       "ollama",
@@ -160,12 +171,12 @@ var presets = []Preset{
 		Note: "本地部署时无需 Key；模型列表通过 Ollama 的 /api/tags 获取。",
 	},
 	{
-		ID:     "custom",
-		Name:   "自定义（任意 OpenAI 兼容服务）",
-		Chat:   true,
-		ASR:    true,
-		TTS:    true,
-		Note:   "自行填写 Base URL；若地址只是域名，会自动补 /v1。",
+		ID:   "custom",
+		Name: "自定义（任意 OpenAI 兼容服务）",
+		Chat: true,
+		ASR:  true,
+		TTS:  true,
+		Note: "自行填写 Base URL；若地址只是域名，会自动补 /v1。",
 	},
 }
 

@@ -14,11 +14,11 @@ import (
 
 // Message 是解析后的 SIP 报文。
 type Message struct {
-	StartLine string
-	Method    string // 请求方法；响应为空
+	StartLine  string
+	Method     string // 请求方法；响应为空
 	StatusCode int
-	Headers   map[string][]string
-	Body      []byte
+	Headers    map[string][]string
+	Body       []byte
 }
 
 // Get 读取首个同名头。
@@ -119,10 +119,10 @@ func title(h string) string {
 
 // Server 是一个极简 SIP UAC/UAS 服务端。
 type Server struct {
-	Addr       string
-	RTPPort    int
-	OnInvite   func(from, to string, sdp string)
-	conn       *net.UDPConn
+	Addr     string
+	RTPPort  int
+	OnInvite func(from, to string, sdp string)
+	conn     *net.UDPConn
 }
 
 // ListenAndServe 阻塞运行 UDP 服务。

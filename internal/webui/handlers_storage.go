@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"syscall"
 
 	"sipvoice/internal/config"
 )
@@ -63,11 +62,7 @@ func (s *Server) handleStorage(w http.ResponseWriter, r *http.Request) {
 		if fi, err := os.Stat(stat.LogPath); err == nil {
 			stat.LogBytes = fi.Size()
 		}
-		var fs syscall.Statfs_t
-		if err := syscall.Statfs(st.RecordingDir, &fs); err == nil {
-			stat.DiskFree = int64(fs.Bavail) * int64(fs.Bsize)
-			stat.DiskTotal = int64(fs.Blocks) * int64(fs.Bsize)
-		}
+		stat.DiskFree, stat.DiskTotal = diskFree(st.RecordingDir)
 		writeJSON(w, map[string]any{"config": st, "stats": stat})
 	case http.MethodPost:
 		var in config.StorageConfig

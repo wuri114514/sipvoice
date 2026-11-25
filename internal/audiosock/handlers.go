@@ -165,8 +165,8 @@ func writeWAV(path string, pcm []byte) {
 	binary.LittleEndian.PutUint32(hdr[4:], 36+dataLen)
 	copy(hdr[8:], "WAVEfmt ")
 	binary.LittleEndian.PutUint32(hdr[16:], 16)
-	binary.LittleEndian.PutUint16(hdr[20:], 1)  // PCM
-	binary.LittleEndian.PutUint16(hdr[22:], 1)  // mono
+	binary.LittleEndian.PutUint16(hdr[20:], 1) // PCM
+	binary.LittleEndian.PutUint16(hdr[22:], 1) // mono
 	binary.LittleEndian.PutUint32(hdr[24:], 8000)
 	binary.LittleEndian.PutUint32(hdr[28:], 16000)
 	binary.LittleEndian.PutUint16(hdr[32:], 2)
