@@ -10,6 +10,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"strings"
 	"time"
 
 	"sipvoice/internal/netutil"
@@ -84,6 +85,83 @@ func New(baseURL, apiKey, model string) *Client {
 	}
 }
 
+// ChatWithHistory 带历史上下文的多轮对话。
+// history 是 [{role, content}] 形式的既有对话，会排在 system 之后、本轮 user 之前。
+func (c *Client) ChatWithHistory(ctx context.Context, system string, history []map[string]string, user string) (string, error) {
+	msgs := make([]map[string]string, 0, len(history)+2)
+	if strings.TrimSpace(system) != "" {
+		msgs = append(msgs, map[string]string{"role": "system", "content": system})
+	}
+	msgs = append(msgs, history...)
+	msgs = append(msgs, map[string]string{"role": "user", "content": user})
+
+	payload := map[string]any{
+		"model":       c.Model,
+		"messages":    msgs,
+		"temperature": 0.7,
+	}
+	if c.MaxTokens > 0 {
+		payload["max_tokens"] = c.MaxTokens
+	}
+	body, err := c.postJSON(ctx, "/chat/completions", payload)
+	if err != nil {
+		return "", err
+	}
+	var out struct {
+		Choices []struct {
+			Message struct{ Content string } `json:"message"`
+		} `json:"choices"`
+		Error *struct{ Message string } `json:"error"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return "", fmt.Errorf("chat: decode: %w", err)
+	}
+	if out.Error != nil && out.Error.Message != "" {
+		return "", fmt.Errorf("chat: %s", out.Error.Message)
+	}
+	if len(out.Choices) == 0 {
+		return "", fmt.Errorf("chat: empty choices")
+	}
+	return out.Choices[0].Message.Content, nil
+}
+
+// Vision 把图片（data URL）连同问题交给多模态模型。
+func (c *Client) Vision(ctx context.Context, prompt, dataURL string) (string, error) {
+	payload := map[string]any{
+		"model": c.Model,
+		"messages": []map[string]any{
+			{"role": "user", "content": []map[string]any{
+				{"type": "image_url", "image_url": map[string]string{"url": dataURL}},
+				{"type": "text", "text": prompt},
+			}},
+		},
+		"temperature": 0.3,
+	}
+	if c.MaxTokens > 0 {
+		payload["max_tokens"] = c.MaxTokens
+	}
+	body, err := c.postJSON(ctx, "/chat/completions", payload)
+	if err != nil {
+		return "", err
+	}
+	var out struct {
+		Choices []struct {
+			Message struct{ Content string } `json:"message"`
+		} `json:"choices"`
+		Error *struct{ Message string } `json:"error"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return "", fmt.Errorf("vision: decode: %w", err)
+	}
+	if out.Error != nil && out.Error.Message != "" {
+		return "", fmt.Errorf("vision: %s", out.Error.Message)
+	}
+	if len(out.Choices) == 0 {
+		return "", fmt.Errorf("vision: 模型没有返回内容（可能不支持图片输入）")
+	}
+	return out.Choices[0].Message.Content, nil
+}
+
 // Chat 调用 /chat/completions，返回首个候选文本。
 func (c *Client) Chat(ctx context.Context, system, user string) (string, error) {
 	payload := map[string]any{
@@ -149,7 +227,9 @@ func (c *Client) Transcribe(ctx context.Context, wav []byte) (string, error) {
 	if resp.StatusCode/100 != 2 {
 		return "", fmt.Errorf("asr: http %d: %s", resp.StatusCode, truncate(raw))
 	}
-	var out struct{ Text string `json:"text"` }
+	var out struct {
+		Text string `json:"text"`
+	}
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return "", fmt.Errorf("asr: decode: %w", err)
 	}
@@ -159,9 +239,9 @@ func (c *Client) Transcribe(ctx context.Context, wav []byte) (string, error) {
 // Speak 调用 /audio/speech，返回音频字节（默认 mp3）。
 func (c *Client) Speak(ctx context.Context, text, voice string) ([]byte, error) {
 	payload := map[string]any{
-		"model":          c.Model,
-		"input":          text,
-		"voice":          voice,
+		"model":           c.Model,
+		"input":           text,
+		"voice":           voice,
 		"response_format": "wav",
 	}
 	body, err := c.postJSON(ctx, "/audio/speech", payload)

@@ -9,9 +9,9 @@ import (
 )
 
 type phoneAction struct {
-	Action string        `json:"action"`
-	Phone  phones.Phone  `json:"phone"`
-	Number string        `json:"number"`
+	Action string       `json:"action"`
+	Phone  phones.Phone `json:"phone"`
+	Number string       `json:"number"`
 }
 
 func (s *Server) handlePhones(w http.ResponseWriter, r *http.Request) {

@@ -24,13 +24,13 @@ type ChatModel interface {
 
 // Turn 记录一次对话回合的中间结果，便于日志与观测。
 type Turn struct {
-	StartedAt   time.Time
-	Transcript  string
-	Reply       string
-	AudioBytes  int
-	ASRLatency  time.Duration
-	AILatency   time.Duration
-	TTSLatency  time.Duration
+	StartedAt  time.Time
+	Transcript string
+	Reply      string
+	AudioBytes int
+	ASRLatency time.Duration
+	AILatency  time.Duration
+	TTSLatency time.Duration
 }
 
 // Bridge 编排单个对话回合。

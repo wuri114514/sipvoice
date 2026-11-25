@@ -1,4 +1,4 @@
-# 构建产物
+﻿# 构建产物
 /dist/
 /release/
 
@@ -19,3 +19,8 @@ Thumbs.db
 *.zip
 *.tar.gz
 *.exe
+
+# 编译产物
+/voicebridge
+/voicebridge-linux-*
+

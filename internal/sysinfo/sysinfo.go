@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	
+
 	"time"
 )
 
@@ -21,32 +21,32 @@ type Proc struct {
 
 // Snapshot 是一次采样。
 type Snapshot struct {
-	At        int64             `json:"at"`
-	CPU       float64           `json:"cpu"`       // 0-100
-	Load1     float64           `json:"load1"`
-	Load5     float64           `json:"load5"`
-	Load15    float64           `json:"load15"`
-	MemTotal  uint64            `json:"mem_total_kb"`
-	MemAvail  uint64            `json:"mem_avail_kb"`
-	SwapTotal uint64            `json:"swap_total_kb"`
-	SwapFree  uint64            `json:"swap_free_kb"`
-	DiskTotal uint64            `json:"disk_total"`
-	DiskFree  uint64            `json:"disk_free"`
-	Uptime    int64             `json:"uptime_sec"`
-	Temp      float64           `json:"temp_c"`
-	RxRate    float64           `json:"rx_bps"`
-	TxRate    float64           `json:"tx_bps"`
-	Procs     map[string]Proc   `json:"procs"`
-	Cores     int               `json:"cores"`
+	At        int64           `json:"at"`
+	CPU       float64         `json:"cpu"` // 0-100
+	Load1     float64         `json:"load1"`
+	Load5     float64         `json:"load5"`
+	Load15    float64         `json:"load15"`
+	MemTotal  uint64          `json:"mem_total_kb"`
+	MemAvail  uint64          `json:"mem_avail_kb"`
+	SwapTotal uint64          `json:"swap_total_kb"`
+	SwapFree  uint64          `json:"swap_free_kb"`
+	DiskTotal uint64          `json:"disk_total"`
+	DiskFree  uint64          `json:"disk_free"`
+	Uptime    int64           `json:"uptime_sec"`
+	Temp      float64         `json:"temp_c"`
+	RxRate    float64         `json:"rx_bps"`
+	TxRate    float64         `json:"tx_bps"`
+	Procs     map[string]Proc `json:"procs"`
+	Cores     int             `json:"cores"`
 }
 
 var (
-	mu       sync.Mutex
+	mu                  sync.Mutex
 	prevIdle, prevTotal uint64
-	prevAt   time.Time
-	prevRx, prevTx uint64
-	prevNetAt time.Time
-	history  []Snapshot
+	prevAt              time.Time
+	prevRx, prevTx      uint64
+	prevNetAt           time.Time
+	history             []Snapshot
 )
 
 // Collect 采集一次指标（内部保存上一次计数器用于算速率/占用率）。
@@ -187,8 +187,6 @@ func readSwap() (total, free uint64) {
 	}
 	return
 }
-
-
 
 func readUptime() int64 {
 	data, err := os.ReadFile("/proc/uptime")

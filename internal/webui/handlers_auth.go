@@ -2,7 +2,9 @@ package webui
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -39,9 +41,11 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	}
 	name := strings.TrimSpace(in.Username)
 	if err := s.opt.Auth.Setup(name, in.Password); err != nil {
+		s.noteLoginFail(r, name, "初始化失败: "+err.Error())
 		http.Error(w, err.Error(), 400)
 		return
 	}
+	log.Printf("[webui] 初始化管理员完成 IP=%s 用户=%q", clientIP(r), name)
 	s.setCookie(w, s.opt.Auth.NewSession(name))
 	writeJSON(w, map[string]any{"ok": true})
 }
@@ -56,12 +60,22 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 400)
 		return
 	}
+	ip := clientIP(r)
+	if banned, left := s.guard.blocked(ip); banned {
+		log.Printf("[webui] 拒绝来自 %s 的登录：封禁中，剩余 %s", ip, left.Round(time.Second))
+		w.Header().Set("Retry-After", strconv.Itoa(int(left.Seconds())))
+		http.Error(w, "失败次数过多，请稍后再试（剩余 "+left.Round(time.Second).String()+"）", http.StatusTooManyRequests)
+		return
+	}
 	name := strings.TrimSpace(in.Username)
 	if !s.opt.Auth.Verify(name, in.Password) {
 		time.Sleep(300 * time.Millisecond)
+		s.noteLoginFail(r, name, "密码错误")
 		http.Error(w, "用户名或密码错误", 401)
 		return
 	}
+	s.guard.success(ip)
+	log.Printf("[webui] 登录成功 IP=%s 用户=%q", ip, name)
 	s.setCookie(w, s.opt.Auth.NewSession(name))
 	writeJSON(w, map[string]any{"ok": true})
 }

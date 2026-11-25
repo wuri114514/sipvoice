@@ -103,10 +103,12 @@ func drainAudio(ctx context.Context, ch <-chan []int16) <-chan []int16 {
 	return out
 }
 
-// handleTestNotify 发送一条 ServerChan 测试推送。
+// handleTestNotify 发送测试推送：ServerChan 与邮局两条通道都试一遍。
 func (s *Server) handleTestNotify(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Key string `json:"key"`
+		Key   string `json:"key"`
+		Mail  bool   `json:"mail"`
+		Title string `json:"title"`
 	}
 	if r.Body != nil {
 		_ = json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&in)
@@ -116,17 +118,53 @@ func (s *Server) handleTestNotify(w http.ResponseWriter, r *http.Request) {
 	if key == "" {
 		key = cfg.Notify.ServerChanKey
 	}
-	if key == "" {
-		writeJSON(w, map[string]any{"ok": false, "error": "未配置 SendKey"})
-		return
-	}
-	n := notify.New(key, time.Minute)
-	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+
+	ctx, cancel := context.WithTimeout(r.Context(), 40*time.Second)
 	defer cancel()
-	err := n.SendOnce(ctx, "SIPVoice 测试推送", "看到这条消息说明 ServerChan 已经通了。\n\n时间："+time.Now().Format("2006-01-02 15:04:05"))
-	if err != nil {
-		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
-		return
+
+	title := "SIPVoice 测试推送"
+	body := "看到这条消息说明通知通道已经通了。\n\n时间：" + time.Now().Format("2006-01-02 15:04:05")
+	if strings.TrimSpace(in.Title) != "" {
+		title = strings.TrimSpace(in.Title)
 	}
-	writeJSON(w, map[string]any{"ok": true})
+
+	var (
+		okList  []string
+		errList []string
+	)
+
+	// 通道 1：ServerChan
+	if key != "" {
+		n := notify.New(key, time.Minute)
+		if err := n.SendOnce(ctx, title, body); err != nil {
+			errList = append(errList, "ServerChan: "+err.Error())
+		} else {
+			okList = append(okList, "ServerChan")
+		}
+	}
+
+	// 通道 2：邮局（面板勾选时才测）
+	if in.Mail || cfg.Notify.MailEnabled {
+		mc := notify.NewMailChannel("/etc/sipvoice/mail.json", time.Minute)
+		if cfg.Notify.MailSubject != "" {
+			mc.Subject = cfg.Notify.MailSubject
+		}
+		if cfg.Notify.MailBody != "" {
+			mc.Body = cfg.Notify.MailBody
+		}
+		if err := mc.SendOnce(ctx, title, body); err != nil {
+			errList = append(errList, "邮局: "+err.Error())
+		} else {
+			okList = append(okList, "邮局")
+		}
+	}
+
+	res := map[string]any{"ok": len(okList) > 0, "channels": okList}
+	if len(errList) > 0 {
+		res["errors"] = errList
+	}
+	if len(okList) == 0 && len(errList) == 0 {
+		res["error"] = "没有可用的通知通道（SendKey 与邮局都没配）"
+	}
+	writeJSON(w, res)
 }

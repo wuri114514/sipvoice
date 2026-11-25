@@ -1,4 +1,4 @@
-// sipvoice: SIP 语音网关 —— 电话终端 ⇄ ASR/TTS ⇄ AI 模型
+﻿// sipvoice: SIP 语音网关 —— 电话终端 ⇄ ASR/TTS ⇄ AI 模型
 package main
 
 import (
@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -23,26 +25,28 @@ import (
 	"sipvoice/internal/omni"
 	"sipvoice/internal/phones"
 	"sipvoice/internal/pipeline"
+	"sipvoice/internal/session"
 	"sipvoice/internal/sip"
-	"sipvoice/internal/webui"
 	"sipvoice/internal/voice"
+	"sipvoice/internal/webui"
+	"sipvoice/internal/worker"
 )
 
-var version = "1.3.4"
+var version = "2.0.2"
 
 func main() {
 	var (
-		mode     = flag.String("mode", "server", "运行模式: server | client | audio | calltest | agent | mockai | doctor")
-		listen   = flag.String("listen", ":5060", "SIP 监听地址（server 模式）")
-		target   = flag.String("target", "127.0.0.1:5060", "SIP 探测目标（client 模式）")
-		rtpPort  = flag.Int("rtp", 40000, "RTP 起始端口")
-		aiURL    = flag.String("ai-url", "", "OpenAI 兼容 API base（如 https://api.openai.com/v1）")
-		aiKey    = flag.String("ai-key", "", "API Key，默认读 SIPVOICE_API_KEY")
-		chatMod  = flag.String("chat-model", "gpt-4o-mini", "对话模型")
-		asrMod   = flag.String("asr-model", "whisper-1", "语音识别模型")
-		ttsMod   = flag.String("tts-model", "tts-1", "语音合成模型")
-		system   = flag.String("system", "你是一名电话客服，回答要简短口语化，控制在两句话内。", "系统提示词")
-		showVer  = flag.Bool("version", false, "打印版本")
+		mode    = flag.String("mode", "server", "运行模式: server | client | audio | calltest | agent | mockai | doctor")
+		listen  = flag.String("listen", ":5060", "SIP 监听地址（server 模式）")
+		target  = flag.String("target", "127.0.0.1:5060", "SIP 探测目标（client 模式）")
+		rtpPort = flag.Int("rtp", 40000, "RTP 起始端口")
+		aiURL   = flag.String("ai-url", "", "OpenAI 兼容 API base（如 https://api.openai.com/v1）")
+		aiKey   = flag.String("ai-key", "", "API Key，默认读 SIPVOICE_API_KEY")
+		chatMod = flag.String("chat-model", "gpt-4o-mini", "对话模型")
+		asrMod  = flag.String("asr-model", "whisper-1", "语音识别模型")
+		ttsMod  = flag.String("tts-model", "tts-1", "语音合成模型")
+		system  = flag.String("system", "你是一名电话客服，回答要简短口语化，控制在两句话内。", "系统提示词")
+		showVer = flag.Bool("version", false, "打印版本")
 
 		audioListen = flag.String("audio-listen", "127.0.0.1:9092", "AudioSocket 监听地址（audio 模式）")
 		audioMode   = flag.String("audio-mode", "echo", "audio 模式行为: echo | tone | wav")
@@ -219,17 +223,47 @@ func runAgent(ctx context.Context, cfgPath, webAddr string) {
 		}
 	}()
 
+	// 异步会话：按主叫号码保留对话上下文
+	sessMgr := session.New(time.Duration(cfg.Session.TTLMinutes)*time.Minute, cfg.Session.MaxMessages)
+	ag.Sessions = sessMgr
+
+	// 异步任务 worker：执行 AI 识别的发传真 / 回拨
+	faxWorker := worker.New(sessMgr)
+	faxWorker.Originate = func(wctx context.Context, ext, ctxName, exten string) error {
+		// 分机走 PJSIP，拨号方案扩展号走 Local（与 fax.originateCmd 同一策略）
+		ch := "PJSIP/" + ext
+		if o, err := runAsterisk("pjsip show endpoint %s", ext); err != nil || !strings.Contains(o, "Endpoint:") {
+			ch = "Local/" + ext + "@internal"
+		}
+		_, err := runAsterisk("channel originate %s extension %s@%s", ch, exten, ctxName)
+		return err
+	}
+	faxWorker.Notify = func(nctx context.Context, title, body string) error {
+		push(nctx, nt, title, body)
+		return nil
+	}
+	go faxWorker.Run(ctx)
+
+	// 传真到达自动分析：新传真交给视觉模型，结果写进会话与传真记录
+	startFaxWatcher(ctx, sessMgr, func(wctx context.Context, item string) (string, error) {
+		return analyzeFaxItem(wctx, item)
+	}, func(key, summary string) {
+		faxWorker.NotifyFaxArrived(ctx, key, summary)
+	})
+
 	store := webui.NewStore()
 	ag.Obs = store
 
-	// 通知通道：ServerChan 推送（配置保存后热更新 Key）
+	// 通知通道：ServerChan + 邮局（配置保存后热更新）
 	nt = notify.New(cfg.Notify.ServerChanKey, time.Duration(cfg.Notify.MinIntervalMS)*time.Millisecond)
 	ag.SetOnError(func(kind, msg string) {
 		c := config.Get()
 		if !c.Notify.Enabled || !c.Notify.OnError {
 			return
 		}
-		_ = nt.Send(context.Background(), "SIPVoice 调用失败（"+kind+"）", msg+"\n\n时间："+time.Now().Format("2006-01-02 15:04:05"))
+		title := "SIPVoice 调用失败（" + kind + "）"
+		body := msg + "\n\n时间：" + time.Now().Format("2006-01-02 15:04:05")
+		push(context.Background(), nt, title, body)
 	})
 	startMonitors(ctx, nt)
 
@@ -272,18 +306,19 @@ func runAgent(ctx context.Context, cfgPath, webAddr string) {
 	}
 
 	webui.Start(webui.Options{
-		Addr:     webAddr,
-		Version:  version,
-		Agent:    ag,
-		Store:    store,
-		Models:   mm,
-		Auth:     as,
-		TL:       tl,
-		Phones:   ps,
+		Addr:           webAddr,
+		Version:        version,
+		Agent:          ag,
+		Store:          store,
+		Models:         mm,
+		Auth:           as,
+		TL:             tl,
+		Phones:         ps,
+		Sessions:       sessMgr,
 		PJSIPConf:      pj,
 		ExtensionsConf: ex,
 		BackupDir:      "/etc/sipvoice/backups",
-		OnConfig: buildProviders,
+		OnConfig:       buildProviders,
 	})
 
 	aiDesc := cfg.AI.BaseURL
@@ -336,4 +371,19 @@ func firstLine(s string) string {
 		}
 	}
 	return s
+}
+
+// runAsterisk 执行一条 Asterisk CLI 命令（带 sudo 兜底）。
+func runAsterisk(format string, args ...any) (string, error) {
+	cmdline := fmt.Sprintf(format, args...)
+	for _, prog := range [][]string{
+		{"sudo", "-n", "/usr/sbin/asterisk", "-rx", cmdline},
+		{"/usr/sbin/asterisk", "-rx", cmdline},
+	} {
+		out, err := exec.Command(prog[0], prog[1:]...).CombinedOutput()
+		if err == nil {
+			return string(out), nil
+		}
+	}
+	return "", fmt.Errorf("asterisk 命令失败: %s", cmdline)
 }

@@ -67,6 +67,15 @@ command -v curl >/dev/null 2>&1      || NEED="$NEED curl"
 [ -d /etc/ssl/certs ]                || NEED="$NEED ca-certificates"
 command -v ffmpeg >/dev/null 2>&1    || NEED="$NEED ffmpeg"
 command -v uuidgen >/dev/null 2>&1   || NEED="$NEED uuid-runtime"
+command -v tiffinfo >/dev/null 2>&1  || NEED="$NEED libtiff-tools"
+command -v convert >/dev/null 2>&1   || NEED="$NEED imagemagick"
+command -v paps >/dev/null 2>&1      || NEED="$NEED paps"
+command -v ps2pdf >/dev/null 2>&1    || NEED="$NEED ghostscript"
+# 中文字体（文本转传真、PDF 渲染）
+fc-list 2>/dev/null | grep -qi "Noto Sans CJK" || NEED="$NEED fonts-noto-cjk"
+# sox 读 mp3（edge-tts 输出格式）
+sox --help 2>/dev/null | head -1 >/dev/null && ! sox -h 2>/dev/null | grep -qi mpeg \
+    && NEED="$NEED libsox-fmt-mp3"
 if [ "$SKIP_ASTERISK" -eq 0 ]; then
     command -v asterisk >/dev/null 2>&1 || NEED="$NEED asterisk"
 fi
@@ -204,6 +213,10 @@ DROPIN
 
     # 传真落盘目录
     install -d -m 775 -o asterisk -g asterisk /var/spool/asterisk/fax 2>/dev/null || true
+    # 传真发送/失败归档/提示音目录
+    install -d -m 755 -o sipvoice -g sipvoice /var/lib/sipvoice/prompts /var/lib/sipvoice/fax-failed
+    # T.38 走 UDPTL，放行对应端口
+    ufw allow 4000:4999/udp comment 'T.38 UDPTL' >/dev/null 2>&1 || true
 
     # ---------- 5.1 存储与日志保留 ----------
     # 有独立数据盘（/data 是挂载点）就把录音/传真放过去，否则放系统盘

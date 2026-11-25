@@ -34,7 +34,7 @@ No public IP, no vendor cloud, no monthly platform fee — a single Go binary th
 - 🖥️ **Web console**: provider presets, live model list, TTS preview, ASR upload/record test,
   phone extension inventory, system monitor
 - 🔔 **Alerts**: ServerChan push to WeChat (startup / cloud errors / low disk)
-- 📠 Fax receive (T.38 / G.711, saved as TIFF) — PDF conversion not implemented yet
+- 📠 Fax send/receive (T.38 / G.711, saved as TIFF, PDF convertible)
 
 ## Architecture
 
@@ -182,6 +182,28 @@ docker run -d --name sipvoice \
 `SIPVOICE_WEB` overrides the console bind address (default `0.0.0.0:8080`). See
 [docs/DOCKER.md](docs/DOCKER.md) for details and troubleshooting.
 
+## Fax
+
+The **Fax** tab covers sending and receiving end to end.
+
+**Receive** — dial **600**. T.38 (UDPTL 4000-4999) with G.711 fallback. Faxes land in
+/var/spool/asterisk/fax and can be previewed page by page or downloaded from the console.
+
+**Send** — pick an archived fax, enter a destination extension, and the server calls out and
+sends it. A **pre-generated voice prompt** plays first (synthesised once, reused forever, so
+no repeated TTS billing):
+
+> 感谢接听，这是 AI 下发的传真服务。请按传真机上的开始键接收。如果无法接收，请按 4 结束。
+
+After the prompt the server waits (configurable, default 30 s). Pressing **4** marks the
+delivery as "recipient cannot receive fax".
+
+**Failures** — rejected, unreachable, or failed-handshake faxes are archived under
+/var/lib/sipvoice/fax-failed and emailed with an automatically converted **PDF** attachment.
+Each extension can carry its own mailbox; otherwise the global default is used.
+
+**Mail** — built-in Go SMTP client (no msmtp/sendmail needed), SSL 465 and STARTTLS 587 with
+automatic fallback, primary + backup provider, and a one-click "send test mail" button.
 ## Storage & logs
 
 The **Storage** tab in the console controls all of this — no server access needed:
@@ -201,6 +223,59 @@ Under the hood the console stores the switch and path in Asterisk's AstDB
 (sipvoice/rec, sipvoice/rec_dir), which the dialplan reads per call, and writes the
 quota/rotation rules to /etc/default/sipvoice-rec and /etc/logrotate.d/asterisk.
 Without a separate data disk, recordings live under /var/lib/sipvoice/recordings.
+## Upgrading from 1.x
+
+2.0 brings four breaking changes — read this before upgrading.
+
+### 1. Secrets are now encrypted and stored separately
+
+In 1.x, API keys lived in plain text in `/etc/sipvoice/config.json`. From 2.0 they live in
+`/etc/sipvoice/secrets.json`, encrypted with AES-256-GCM (the key is derived from
+`/etc/machine-id`, so the file will not decrypt on another machine). `config.json` now holds
+empty strings.
+
+**The first time you save the config from the console after upgrading, keys migrate
+automatically.** If you hand-edited `config.json` before, re-enter the keys on the
+"AI service" page and save once to confirm the migration.
+
+### 2. New system dependencies
+
+| Package | Purpose |
+|---|---|
+| `paps` + `ghostscript` | Render text to PDF (text-to-fax) |
+| `fonts-noto-cjk` | Chinese font rendering |
+| `libsox-fmt-mp3` | Decode the mp3 that edge-tts emits |
+| `python3-venv` | Install environment for edge-tts |
+
+`upgrade.sh` installs them automatically; manual deployments need to `apt install` them.
+
+### 3. Directory permissions
+
+`/etc/sipvoice` must be `2770 root:sipvoice`. The service writes config files as the
+`sipvoice` user (temp file then rename), and a group-unwritable directory fails with
+`permission denied: /etc/sipvoice/xxx.json.tmp`.
+
+`upgrade.sh` fixes this automatically.
+
+### 4. Fax filename format
+
+Received faxes now include the caller number: `20261125-112812-1003.tiff`
+(previously just a timestamp). External scripts that parse the old format need updating.
+
+### Upgrade steps
+
+```bash
+# 1. Download the new binary
+# 2. Upgrade (auto backup, auto rollback, auto dependencies)
+sudo ./upgrade.sh ./voicebridge
+
+# Roll back if the new version misbehaves
+sudo ./upgrade.sh --rollback
+
+# List available backups
+sudo ./upgrade.sh --list
+```
+
 ## Operations
 
 ```bash
@@ -279,10 +354,37 @@ docs/                screenshots, release process
 - [x] SIP signalling, AudioSocket bridge, VAD/barge-in
 - [x] Pipeline and end-to-end voice, web console, one-command deploy
 - [x] Provider presets, live model list, TTS/ASR online tests, alert push
-- [ ] Fax: TIFF → PDF and download from the console
-- [ ] `.deb` / `.rpm` packages
-- [ ] Docker image
+- [x] Fax send/receive: T.38 + G.711, voice prompt, DTMF control, failure archiving, email
+- [x] Async sessions: context kept per caller number, AI can send faxes and call back
+- [x] Vision analysis of faxes and images, written into the session and the fax record
+- [x] `.deb` package and Docker image
+- [ ] **Image generation (multi-model collaboration)** — see below
+- [ ] Structured extraction from received faxes (amounts, dates, contract numbers)
+- [ ] Merge several documents into one outbound fax
 - [ ] More end-to-end voice providers
+
+### Image generation (multi-model collaboration)
+
+The vision models wired up today (Qwen-VL family) only **understand** images — they cannot generate
+them, and no mainstream provider offers a single model that both sees and draws.
+
+The plan is to let the console configure **two separate models**:
+
+| Role | Example | Purpose |
+|---|---|---|
+| Chat / vision | `qwen3-vl-plus` (Bailian) | Conversation, reading faxes and photos |
+| Image generation | Kolors family (SiliconFlow) | Generate images from a prompt |
+
+The AI expresses intent through action markers, and the server dispatches accordingly:
+
+```
+[DRAW:description]        → call the image model (planned)
+[FAXTEXT:number:text]     → render text to PDF, then fax it (implemented)
+[FAX:number:filename]     → send an archived fax as-is (implemented)
+[CALLBACK:message]        → call the user back per policy (implemented)
+```
+
+Generated images can then go out through the fax pipeline (both TIFF and PDF output are supported).
 
 ## Contributing
 

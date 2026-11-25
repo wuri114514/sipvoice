@@ -18,6 +18,7 @@ import (
 	"sipvoice/internal/config"
 	"sipvoice/internal/models"
 	"sipvoice/internal/phones"
+	"sipvoice/internal/session"
 	"sipvoice/internal/sip"
 	"sipvoice/internal/voice"
 )
@@ -27,9 +28,9 @@ var indexHTML []byte
 
 // Turn 是一轮对话。
 type Turn struct {
-	At       time.Time `json:"at"`
-	You      string    `json:"you"`
-	Bot      string    `json:"bot"`
+	At  time.Time `json:"at"`
+	You string    `json:"you"`
+	Bot string    `json:"bot"`
 }
 
 // Call 是一通电话的摘要。
@@ -129,18 +130,19 @@ func (s *Store) Calls() []Call {
 
 // Options 是 WebUI 的启动参数。
 type Options struct {
-	Addr     string
-	Version  string
-	Agent    *voice.Agent
-	Store    *Store
-	Models   *models.Manager
-	Auth     *auth.Store
-	TL       *TLManager
-	Phones   *phones.Store
+	Addr           string
+	Version        string
+	Agent          *voice.Agent
+	Store          *Store
+	Models         *models.Manager
+	Auth           *auth.Store
+	TL             *TLManager
+	Phones         *phones.Store
 	PJSIPConf      string
 	ExtensionsConf string
 	BackupDir      string
-	OnConfig func(*config.Config) // 保存后回调，用于热更新 provider
+	OnConfig       func(*config.Config) // 保存后回调，用于热更新 provider
+	Sessions       *session.Manager     // 异步会话（按主叫号码保留上下文）
 }
 
 // Server 是 WebUI 服务器。
@@ -151,6 +153,8 @@ type Server struct {
 	lastAST time.Time
 	astUp   bool
 
+	guard *loginGuard
+
 	handler http.Handler
 	srv     *http.Server
 	srvMu   sync.Mutex
@@ -158,7 +162,7 @@ type Server struct {
 
 // Start 启动 WebUI（非阻塞）。
 func Start(opt Options) *Server {
-	s := &Server{opt: opt, started: time.Now()}
+	s := &Server{opt: opt, started: time.Now(), guard: newLoginGuard()}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleIndex)
 	mux.HandleFunc("/api/status", s.handleStatus)
@@ -187,6 +191,15 @@ func Start(opt Options) *Server {
 	mux.HandleFunc("/api/phones", s.handlePhones)
 	mux.HandleFunc("/api/phones/template", s.handlePhoneTemplate)
 	mux.HandleFunc("/api/storage", s.handleStorage)
+	mux.HandleFunc("/api/security", s.handleSecurity)
+	mux.HandleFunc("/api/fax", s.handleFax)
+	mux.HandleFunc("/api/mail", s.handleMail)
+	mux.HandleFunc("/api/uploads", s.handleUploads)
+	mux.HandleFunc("/api/vision", s.handleVision)
+	mux.HandleFunc("/api/sessions", s.handleSessions)
+	mux.HandleFunc("/api/session/task", s.handleSessionTask)
+	mux.HandleFunc("/api/fax/analyze", s.handleFaxAnalyze)
+	mux.HandleFunc("/api/voice/callback-intro", s.handleCallbackIntro)
 	s.handler = s.withAuth(mux)
 	go s.listen()
 	return s
@@ -253,14 +266,14 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 
 // Status 是 /api/status 的返回。
 type Status struct {
-	Version      string `json:"version"`
-	UptimeSec    int64  `json:"uptime_sec"`
-	AudioListen  string `json:"audio_listen"`
-	AIBase       string `json:"ai_base"`
-	Asterisk     bool   `json:"asterisk"`
-	ActiveCalls  int    `json:"active_calls"`
-	TotalCalls   int    `json:"total_calls"`
-	WebAddr      string `json:"web_addr"`
+	Version     string `json:"version"`
+	UptimeSec   int64  `json:"uptime_sec"`
+	AudioListen string `json:"audio_listen"`
+	AIBase      string `json:"ai_base"`
+	Asterisk    bool   `json:"asterisk"`
+	ActiveCalls int    `json:"active_calls"`
+	TotalCalls  int    `json:"total_calls"`
+	WebAddr     string `json:"web_addr"`
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
@@ -309,11 +322,21 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		cfg := config.Get()
 		view := ConfigView{Config: *cfg, APIKeySet: cfg.AI.APIKey != ""}
+		// 密钥单独加密存放（secrets.json），这里只回传掩码
 		view.AI.APIKey = maskKey(cfg.AI.APIKey)
 		view.AI.ASRKey = maskKey(cfg.AI.ASRKey)
 		view.AI.TTSKey = maskKey(cfg.AI.TTSKey)
 		view.Realtime.APIKey = maskKey(cfg.Realtime.APIKey)
 		view.Notify.ServerChanKey = maskKey(cfg.Notify.ServerChanKey)
+		// 各服务商的 key 只告诉前端"有没有存过"，不回传明文
+		if len(cfg.AI.ProviderKeys) > 0 {
+			view.AI.ProviderKeys = make(map[string]string, len(cfg.AI.ProviderKeys))
+			for k, v := range cfg.AI.ProviderKeys {
+				if v != "" {
+					view.AI.ProviderKeys[k] = "***"
+				}
+			}
+		}
 		writeJSON(w, view)
 	case http.MethodPost:
 		var in config.Config
@@ -339,6 +362,24 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		if in.Audio.Listen == "" {
 			in.Audio.Listen = old.Audio.Listen
+		}
+		// 合并各服务商的 key：前端传 *** 表示"保持原值"
+		if old.AI.ProviderKeys != nil {
+			if in.AI.ProviderKeys == nil {
+				in.AI.ProviderKeys = map[string]string{}
+			}
+			for k, v := range old.AI.ProviderKeys {
+				if cur, ok := in.AI.ProviderKeys[k]; !ok || cur == "***" || cur == "" {
+					in.AI.ProviderKeys[k] = v
+				}
+			}
+		}
+		// 当前服务商填了新 key 时同步记录到 provider_keys
+		if pid := in.AI.Provider; pid != "" && in.AI.APIKey != "" && in.AI.APIKey != "***" {
+			if in.AI.ProviderKeys == nil {
+				in.AI.ProviderKeys = map[string]string{}
+			}
+			in.AI.ProviderKeys[pid] = in.AI.APIKey
 		}
 		if err := config.Set(&in); err != nil {
 			log.Printf("[webui] 保存配置失败: %v", err)
