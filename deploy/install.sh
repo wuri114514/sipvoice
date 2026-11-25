@@ -127,6 +127,52 @@ if [ "$SKIP_ASTERISK" -eq 0 ]; then
     fi
 
     STAMP=$(date +%Y%m%d-%H%M%S)
+
+    # transport 单独成文件：控制台保存话机会重新生成 pjsip.conf，
+    # 把 NAT/公网地址集中在这里才不会被覆盖
+    install -d -m 755 /etc/asterisk/pjsip.d
+    if [ ! -f /etc/asterisk/pjsip.d/transport.conf ]; then
+        PUBLIC_IP="${PUBLIC_IP:-$(curl -4 -s --max-time 6 https://api.ipify.org 2>/dev/null || true)}"
+        {
+            echo "; SIPVoice - PJSIP 传输层（含公网地址），由 install.sh 生成"
+            echo "[transport-udp]"
+            echo "type=transport"
+            echo "protocol=udp"
+            echo "bind=0.0.0.0:5060"
+            echo "allow_reload=yes"
+            if command -v ip >/dev/null 2>&1; then
+                ip -o -4 addr show scope global 2>/dev/null | awk '{print $4}' | while read -r cidr; do
+                    [ -n "$cidr" ] && echo "local_net=$cidr"
+                done
+            fi
+            if [ -n "${PUBLIC_IP:-}" ]; then
+                if ! ip -4 addr show 2>/dev/null | grep -q "inet ${PUBLIC_IP}/"; then
+                    echo "external_signaling_address=$PUBLIC_IP"
+                    echo "external_media_address=$PUBLIC_IP"
+                    log "已写入公网地址：$PUBLIC_IP（1:1 NAT）"
+                fi
+            fi
+        } > /etc/asterisk/pjsip.d/transport.conf
+        chmod 640 /etc/asterisk/pjsip.d/transport.conf
+        chown root:asterisk /etc/asterisk/pjsip.d/transport.conf 2>/dev/null || true
+    fi
+
+    # 老版本 pjsip.conf 里内联的 [transport-udp] 需要迁移掉，否则和 include 冲突
+    if [ -f /etc/asterisk/pjsip.conf ] && ! grep -q "pjsip.d/transport.conf" /etc/asterisk/pjsip.conf; then
+        if grep -q "^\[transport-udp\]" /etc/asterisk/pjsip.conf; then
+            cp -a /etc/asterisk/pjsip.conf "/etc/asterisk/pjsip.conf.bak.$STAMP"
+            awk '
+                /^\[transport-udp\]/ { skip=1; next }
+                skip && /^\[/ { skip=0 }
+                skip { next }
+                { print }
+            ' "/etc/asterisk/pjsip.conf.bak.$STAMP" > /tmp/pjsip.migrated
+            { echo "#include pjsip.d/transport.conf"; echo; cat /tmp/pjsip.migrated; } > /etc/asterisk/pjsip.conf
+            rm -f /tmp/pjsip.migrated
+            log "已把内联 transport 迁移到 pjsip.d/transport.conf"
+        fi
+    fi
+
     for f in pjsip.conf extensions.conf rtp.conf; do
         if [ -f "/etc/asterisk/$f" ] && grep -q "SIPVoice" "/etc/asterisk/$f" 2>/dev/null; then
             log "Asterisk 配置已存在，跳过：$f"

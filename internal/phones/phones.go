@@ -131,7 +131,8 @@ func (s *Store) save(phones []Phone) error {
 func (s *Store) RenderPJSIP() string {
 	var b strings.Builder
 	b.WriteString("; 由 SIPVoice 控制台生成，请勿手工修改\n\n")
-	b.WriteString("[transport-udp]\ntype=transport\nprotocol=udp\nbind=0.0.0.0:5060\nallow_reload=yes\n\n")
+	b.WriteString("; transport（含公网地址）放在 pjsip.d/transport.conf，控制台不会覆盖\n")
+	b.WriteString("#include pjsip.d/transport.conf\n\n")
 
 	for _, p := range s.List() {
 		if !p.Enabled {
@@ -159,7 +160,14 @@ func (s *Store) RenderExtensions() string {
 	b.WriteString("[globals]\n\n")
 
 	b.WriteString("[internal]\n")
-	b.WriteString("exten => 9000,1,NoOp(SIPVoice AI bot)\n same => n,Answer()\n same => n,AudioSocket(${UUID()},127.0.0.1:9092)\n same => n,Hangup()\n")
+	b.WriteString("exten => 9000,1,NoOp(SIPVoice AI bot, caller=${CALLERID(num)})\n")
+	b.WriteString(" same => n,Answer()\n")
+	b.WriteString(" same => n,Set(RECDIR=${DB(sipvoice/rec_dir)})\n")
+	b.WriteString(" same => n,GotoIf($[\"${DB(sipvoice/rec)}\" = \"1\" & \"${RECDIR}\" != \"\"]?rec:ai)\n")
+	b.WriteString(" same => n(rec),MixMonitor(${RECDIR}/${STRFTIME(${EPOCH},,%Y%m%d-%H%M%S)}-${CALLERID(num)}.wav)\n")
+	b.WriteString(" same => n(ai),AudioSocket(${SHELL(uuidgen | tr -d '\\n')},127.0.0.1:9092)\n")
+	b.WriteString(" same => n,Hangup()\n")
+	b.WriteString("exten => _+X.,1,Set(NUM=${EXTEN:1})\n same => n,Goto(internal,${NUM},1)\n")
 	b.WriteString("exten => 600,1,NoOp(fax receive)\n same => n,Answer()\n same => n,Wait(1)\n same => n,ReceiveFAX(/var/spool/asterisk/fax/${STRFTIME(${EPOCH},,%Y%m%d-%H%M%S)}.tiff)\n same => n,Hangup()\n")
 	b.WriteString("exten => _X.,1,Congestion()\n\n")
 

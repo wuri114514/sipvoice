@@ -2,6 +2,20 @@
 
 本项目从"电话能打通"一路做到"可发布"，版本号按 **主.次.修订 b构建** 递增。
 
+## v1.3.4 — 修复控制台保存话机后配置回退
+
+控制台保存话机会重新生成 pjsip.conf / extensions.conf，而模板还是旧版，
+导致：
+- 传输层被重写成没有 external_media_address 的内联块 → 公网通话单向/无声音
+- 拨号方案退回 ${UUID()}（Ubuntu 24.04 的 Asterisk 无 func_uuid）→ AudioSocket 直接失败
+
+修复：
+- transport 独立到 /etc/asterisk/pjsip.d/transport.conf，pjsip.conf 只保留 #include，
+  控制台保存不再覆盖 NAT 配置
+- 控制台生成的拨号方案改用 uuidgen、带 + 前缀兼容、录音走 AstDB（与手工模板一致）
+- install.sh 自动生成 transport.conf（探测公网 IP 与本地网段），并把老配置的内联
+  transport 迁移出去
+
 ## v1.3.3 — 存储与日志保留
 
 - 数据盘：自动识别 /data 挂载点，把录音、传真目录绑定过去（无数据盘时落在 /var/lib/sipvoice）
