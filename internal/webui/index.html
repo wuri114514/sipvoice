@@ -366,6 +366,11 @@
       <table><tbody id="sys-body"></tbody></table>
     </div>
     <div class="panel">
+      <h2>登录防护</h2>
+      <table><tbody id="sec-body"></tbody></table>
+      <div class="row"><button class="ghost" id="sec-refresh">刷新</button><span class="msg" id="sec-msg"></span></div>
+      <div class="msg">同一 IP 在 10 分钟内失败 5 次会被封禁 10 分钟；封禁期间登录直接拒绝。下面可以手动解封。</div>
+    </div>    <div class="panel">
       <h2>账号管理</h2>
       <table><thead><tr><th>用户名</th><th>操作</th></tr></thead><tbody id="user-body"></tbody></table>
       <div class="grid" style="margin-top:12px">
@@ -427,6 +432,7 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   if(b.dataset.tab==='voice') loadModels();
   if(b.dataset.tab==='phones') loadPhones();
   if(b.dataset.tab==='storage') loadStorage();
+  if(b.dataset.tab==='system') loadSecurity();
 });
 
 let cfg=null;
@@ -477,6 +483,32 @@ $('storage-save').onclick=()=>storagePost('', $('storage-msg'), '已保存并应
 $('storage-clean').onclick=()=>storagePost('clean', $('storage-msg'), '已清理');
 $('storage-rotate').onclick=()=>storagePost('rotate', $('storage-msg'), '已轮转日志');
 $('storage-refresh').onclick=()=>loadStorage();
+
+// ---- 登录防护 ----
+async function loadSecurity(){
+  try{
+    const r=await api('/api/security');
+    const list=r.blocked||[];
+    if(!list.length){
+      $('sec-body').innerHTML='<tr><td>当前没有被封禁的 IP</td></tr>';
+    }else{
+      $('sec-body').innerHTML=list.map(function(b){
+        const ip=String(b.ip);
+        return '<tr><th>'+ip+'</th><td>失败 '+b.fails+' 次，剩余 '+Math.ceil(b.remaining/60)+' 分钟 '+
+          '<button class="ghost" data-unblock="'+ip+'">解封</button></td></tr>';
+      }).join('');
+      const btns=$('sec-body').querySelectorAll('button[data-unblock]');
+      for(const b of btns){
+        b.onclick=async function(){
+          await api('/api/security',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ip:b.getAttribute('data-unblock')})});
+          $('sec-msg').textContent='已解封 '+b.getAttribute('data-unblock');
+          loadSecurity();
+        };
+      }
+    }
+  }catch(e){$('sec-body').innerHTML='<tr><td>读取失败: '+e.message+'</td></tr>'}
+}
+$('sec-refresh').onclick=()=>loadSecurity();
 
 async function loadConfig(){  cfg=await api('/api/config');
   $('provider').value=cfg.ai.provider||guessProvider(cfg.ai.base_url)||'';

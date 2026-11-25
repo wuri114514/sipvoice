@@ -151,6 +151,8 @@ type Server struct {
 	lastAST time.Time
 	astUp   bool
 
+	guard *loginGuard
+
 	handler http.Handler
 	srv     *http.Server
 	srvMu   sync.Mutex
@@ -158,7 +160,7 @@ type Server struct {
 
 // Start 启动 WebUI（非阻塞）。
 func Start(opt Options) *Server {
-	s := &Server{opt: opt, started: time.Now()}
+	s := &Server{opt: opt, started: time.Now(), guard: newLoginGuard()}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleIndex)
 	mux.HandleFunc("/api/status", s.handleStatus)
@@ -187,6 +189,7 @@ func Start(opt Options) *Server {
 	mux.HandleFunc("/api/phones", s.handlePhones)
 	mux.HandleFunc("/api/phones/template", s.handlePhoneTemplate)
 	mux.HandleFunc("/api/storage", s.handleStorage)
+	mux.HandleFunc("/api/security", s.handleSecurity)
 	s.handler = s.withAuth(mux)
 	go s.listen()
 	return s
