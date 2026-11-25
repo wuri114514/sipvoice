@@ -138,6 +138,27 @@ sudo systemctl restart sipvoice
 - 如果你原本为 8080 开了防火墙，记得同步放行新端口
 - 想改回默认值：删掉该 drop-in 文件后 `systemctl daemon-reload && systemctl restart sipvoice`
 
+## 安装包（.deb）
+
+适用于 Ubuntu / Debian。`.deb` 里已声明全部依赖，**用 apt 安装最省事**
+（直接 `dpkg -i` 在依赖缺失时会报错中止，之后还得 `apt install -f` 收尾）：
+
+```bash
+# 推荐：apt 自动装齐依赖
+sudo apt install ./sipvoice_2.0.3_amd64.deb
+
+# 或先装依赖再 dpkg
+sudo apt install -y asterisk asterisk-config ffmpeg curl ca-certificates sudo \
+    uuid-runtime libtiff-tools imagemagick ghostscript paps fonts-noto-cjk
+sudo dpkg -i sipvoice_2.0.3_amd64.deb
+```
+
+安装后：
+
+- 服务 `sipvoice` 自动注册并开机自启，控制台 `https://<主机IP>:8080`（首次访问创建管理员）
+- 配置在 `/etc/sipvoice/`，卸载用 `sudo apt purge sipvoice`（`apt remove` 保留配置）
+- 录音落在 `/var/lib/sipvoice/recordings`（无独立数据盘时），清理定时器自动启用
+
 ## Docker
 
 一个镜像里同时包含 Asterisk 和 voicebridge。**强烈建议用 host 网络**——SIP 与 RTP 在 Docker NAT

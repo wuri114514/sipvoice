@@ -28,6 +28,12 @@ install -m 0644 "$ROOT/deploy/config.example.json" "$PKG/usr/share/sipvoice/conf
 install -m 0644 "$ROOT/deploy/asterisk/pjsip.conf" "$PKG/usr/share/sipvoice/asterisk/pjsip.conf"
 install -m 0644 "$ROOT/deploy/asterisk/extensions.conf" "$PKG/usr/share/sipvoice/asterisk/extensions.conf"
 install -m 0644 "$ROOT/deploy/asterisk/rtp.conf" "$PKG/usr/share/sipvoice/asterisk/rtp.conf"
+# 存储脚本、清理定时器与日志轮转（postinst 会部署到系统路径）
+install -m 0755 "$ROOT/deploy/sipvoice-rec-cleanup.sh" "$PKG/usr/share/sipvoice/sipvoice-rec-cleanup.sh"
+install -m 0755 "$ROOT/deploy/sipvoice-storage-apply.sh" "$PKG/usr/share/sipvoice/sipvoice-storage-apply.sh"
+install -m 0644 "$ROOT/deploy/systemd/sipvoice-rec-cleanup.service" "$PKG/usr/share/sipvoice/sipvoice-rec-cleanup.service"
+install -m 0644 "$ROOT/deploy/systemd/sipvoice-rec-cleanup.timer" "$PKG/usr/share/sipvoice/sipvoice-rec-cleanup.timer"
+install -m 0644 "$ROOT/deploy/logrotate-asterisk" "$PKG/usr/share/sipvoice/logrotate-asterisk"
 install -m 0644 "$ROOT/LICENSE" "$PKG/usr/share/doc/sipvoice/LICENSE"
 install -m 0644 "$ROOT/THIRD_PARTY_NOTICES.md" "$PKG/usr/share/doc/sipvoice/THIRD_PARTY_NOTICES.md"
 install -m 0644 "$ROOT/deploy/deb/copyright" "$PKG/usr/share/doc/sipvoice/copyright"

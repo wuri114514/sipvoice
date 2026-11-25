@@ -9,15 +9,55 @@ case "$1" in
             adduser --system --group --no-create-home --shell /usr/sbin/nologin sipvoice >/dev/null
         fi
 
+        # 1.1 面板需要读 Asterisk 写的录音与传真（属 asterisk 组）
+        if getent group asterisk >/dev/null 2>&1; then
+            usermod -aG asterisk sipvoice 2>/dev/null || true
+            # 父目录若属 root，sipvoice 即使进了 asterisk 组也进不去子目录
+            if [ -d /var/spool/asterisk ]; then
+                if [ "$(stat -c '%G' /var/spool/asterisk 2>/dev/null)" != "asterisk" ]; then
+                    chgrp asterisk /var/spool/asterisk 2>/dev/null || true
+                fi
+                chmod g+rx /var/spool/asterisk 2>/dev/null || true
+            fi
+        fi
+
         # 2. 目录
         install -d -m 755 /opt/sipvoice /opt/sipvoice/models
         install -d -m 770 -o root -g sipvoice /etc/sipvoice /etc/sipvoice/backups /etc/sipvoice/tls
         chown -R sipvoice:sipvoice /opt/sipvoice/models
 
+        # 2.1 录音与传真目录（无独立数据盘时落 /var/lib/sipvoice）
+        if mountpoint -q /data 2>/dev/null; then
+            REC_DIR=/data/recordings
+            FAX_DIR=/data/fax
+        else
+            REC_DIR=/var/lib/sipvoice/recordings
+            FAX_DIR=/var/lib/sipvoice/fax
+        fi
+        install -d -m 750 -o asterisk -g asterisk "$REC_DIR" "$REC_DIR/monitor" "$FAX_DIR"
+        chgrp -R asterisk "$REC_DIR" "$FAX_DIR" 2>/dev/null || true
+        chmod -R g+rX "$REC_DIR" "$FAX_DIR" 2>/dev/null || true
+
         # 3. 运行配置（不覆盖已有）
         if [ ! -f /etc/sipvoice/config.json ]; then
             install -m 660 -o root -g sipvoice \
                 /usr/share/sipvoice/config.example.json /etc/sipvoice/config.json
+            # 按实际录音目录写 storage 块，避免面板按 /data/recordings 显示
+            python3 - "$REC_DIR" <<'PYEOF' 2>/dev/null || true
+import json, sys
+rec = sys.argv[1]
+p = '/etc/sipvoice/config.json'
+c = json.load(open(p, encoding='utf-8'))
+c.setdefault('storage', {})
+c['storage'].setdefault('recording_enabled', True)
+c['storage']['recording_dir'] = rec
+c['storage'].setdefault('recording_quota_gb', 5)
+c['storage'].setdefault('log_max_mb', 50)
+c['storage'].setdefault('log_keep', 5)
+json.dump(c, open(p, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
+PYEOF
+            chown root:sipvoice /etc/sipvoice/config.json 2>/dev/null || true
+            chmod 660 /etc/sipvoice/config.json 2>/dev/null || true
         fi
 
         # 4. Asterisk 配置：不是我们的就备份后再覆盖
@@ -31,8 +71,37 @@ case "$1" in
         done
         install -d -m 775 -o asterisk -g asterisk /var/spool/asterisk/fax 2>/dev/null || true
 
+        # 4.1 存储脚本与清理定时器
+        if [ -f /usr/share/sipvoice/sipvoice-rec-cleanup.sh ]; then
+            install -m 755 /usr/share/sipvoice/sipvoice-rec-cleanup.sh /usr/local/sbin/sipvoice-rec-cleanup.sh
+        fi
+        if [ -f /usr/share/sipvoice/sipvoice-storage-apply.sh ]; then
+            install -m 755 /usr/share/sipvoice/sipvoice-storage-apply.sh /usr/local/sbin/sipvoice-storage-apply.sh
+        fi
+        if [ -f /usr/share/sipvoice/sipvoice-rec-cleanup.service ] && [ -f /usr/share/sipvoice/sipvoice-rec-cleanup.timer ]; then
+            install -m 644 /usr/share/sipvoice/sipvoice-rec-cleanup.service /etc/systemd/system/
+            install -m 644 /usr/share/sipvoice/sipvoice-rec-cleanup.timer /etc/systemd/system/
+            systemctl enable --now sipvoice-rec-cleanup.timer >/dev/null 2>&1 || true
+        fi
+        # 录音策略默认值
+        if [ ! -f /etc/default/sipvoice-rec ]; then
+            cat > /etc/default/sipvoice-rec <<EOF
+# SIPVoice 录音保留策略
+DIR=$REC_DIR
+LIMIT_GB=5
+TARGET_PERCENT=90
+REC=1
+EOF
+            chmod 644 /etc/default/sipvoice-rec
+        fi
+        # Asterisk 日志轮转
+        if [ -f /usr/share/sipvoice/logrotate-asterisk ]; then
+            install -m 644 /usr/share/sipvoice/logrotate-asterisk /etc/logrotate.d/asterisk
+        fi
+
         # 5. 面板保存话机配置时需要提权执行 asterisk
         echo 'sipvoice ALL=(root) NOPASSWD: /usr/sbin/asterisk' > /etc/sudoers.d/sipvoice-asterisk
+        echo 'sipvoice ALL=(root) NOPASSWD: /usr/local/sbin/sipvoice-storage-apply.sh' >> /etc/sudoers.d/sipvoice-asterisk
         chmod 440 /etc/sudoers.d/sipvoice-asterisk
 
         # 6. 服务

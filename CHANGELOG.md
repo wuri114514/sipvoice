@@ -2,6 +2,33 @@
 
 本项目从"电话能打通"一路做到"可发布"，版本号按 **主.次.修订 b构建** 递增。
 
+## v2.0.3 — 部署可靠性修复（干净机器实测驱动）
+
+在全新安装的 Ubuntu 26.04.1（1 核 / 1.6 GB / 无独立数据盘）上从零部署时发现并修复：
+
+- **无数据盘时服务起不来**：`sipvoice.service` 的 `ReadWritePaths` 硬编码 `/data`，
+  该目录不存在时 systemd 以 `226/NAMESPACE` 拒绝启动，面板完全打不开。
+  改为只列通用路径，并由 `install.sh` 按实际录音目录追加。
+- **控制台读传真/录音报 permission denied**：Debian/Ubuntu 的
+  `/var/spool/asterisk` 属组为 root，`sipvoice` 即使加入 asterisk 组也缺 `x` 位
+  进不去子目录。`install.sh` 与 deb `postinst` 现会修正属组并补 `g+rx`。
+- **存储页显示 `/data/recordings` 与 `0 B / 0 B`**：`config.example.json` 无
+  `storage` 块时回落到写死默认值，且对不存在目录 `Statfs` 失败。
+  现在安装时按实际目录写入 `storage`，后端也做兜底。
+
+打包链路修复：
+- `scripts/package.sh` 补齐 `sipvoice.service`、`logrotate-asterisk`、存储脚本、
+  `systemd/` 单元与 `asterisk/deploy.sh`（此前缺失会导致 `install.sh` 中断），
+  并给脚本正确的执行位
+- `deploy/deb/postinst` 补齐 `usermod -aG asterisk`、目录权限、`storage` 初始化、
+  存储脚本与清理定时器部署、`storage-apply` 的 sudoers 条目
+- `scripts/build-deb.sh` 打包上述新文件；`control.in` 补 `ghostscript` 依赖
+- README 中英双版新增 `.deb` 安装章节，推荐 `apt install ./x.deb` 由 apt 解依赖
+
+实测：干净 Ubuntu 上 `tar -xzf` + `sudo bash install.sh` 70 秒完成，服务 active、
+控制台可登录、文件与磁盘显示正确；`apt install ./sipvoice_2.0.3_amd64.deb`
+安装后同样验证通过（版本、权限、storage、定时器、日志轮转全部正常）。
+
 ## v2.0.2 — 面板保存不再覆盖其它区块
 
 - **修复**：在任意一页点「保存」会把其它页设置重置为默认值。

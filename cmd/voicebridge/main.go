@@ -1,4 +1,4 @@
-﻿// sipvoice: SIP 语音网关 —— 电话终端 ⇄ ASR/TTS ⇄ AI 模型
+// sipvoice: SIP 语音网关 —— 电话终端 ⇄ ASR/TTS ⇄ AI 模型
 package main
 
 import (
@@ -32,7 +32,7 @@ import (
 	"sipvoice/internal/worker"
 )
 
-var version = "2.0.2"
+var version = "2.0.3"
 
 func main() {
 	var (

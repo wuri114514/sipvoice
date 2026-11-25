@@ -144,6 +144,30 @@ Notes:
 - the TLS certificate is bound to the host name, not the port — no need to regenerate it
 - open the new port in your firewall if you had one for 8080
 
+## Package (.deb)
+
+For Ubuntu / Debian. The `.deb` declares all dependencies — **install it with apt**
+(`dpkg -i` aborts when dependencies are missing and needs `apt install -f` afterwards):
+
+```bash
+# recommended: apt resolves dependencies
+sudo apt install ./sipvoice_2.0.3_amd64.deb
+
+# or install dependencies first, then dpkg
+sudo apt install -y asterisk asterisk-config ffmpeg curl ca-certificates sudo \
+    uuid-runtime libtiff-tools imagemagick ghostscript paps fonts-noto-cjk
+sudo dpkg -i sipvoice_2.0.3_amd64.deb
+```
+
+After installing:
+
+- the `sipvoice` service is registered and enabled, console at `https://<host-ip>:8080`
+  (create the admin account on first visit)
+- config lives in `/etc/sipvoice/`; uninstall with `sudo apt purge sipvoice`
+  (`apt remove` keeps the config)
+- recordings go to `/var/lib/sipvoice/recordings` when there is no separate data disk,
+  and the cleanup timer is enabled automatically
+
 ## Docker
 
 A single image contains Asterisk + voicebridge. **Host networking is strongly recommended** — SIP and
