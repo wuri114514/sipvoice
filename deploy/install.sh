@@ -299,6 +299,20 @@ SUDOERS
 chmod 440 /etc/sudoers.d/sipvoice-asterisk
 
 install -m 644 "$SRC/sipvoice.service" /etc/systemd/system/sipvoice.service
+# ReadWritePaths 中的路径必须真实存在，否则 systemd 以 226/NAMESPACE 拒绝启动
+# （典型场景：没有独立数据盘、/data 不存在）。这里按实际录音目录重写整行。
+if [ -n "${REC_DIR:-}" ] && [ -d "$REC_DIR" ]; then
+    awk -v extra="$REC_DIR" '
+        /^ReadWritePaths=/ {
+            if (index($0, extra) == 0) { print $0 " " extra }
+            else { print $0 }
+            next
+        }
+        { print }
+    ' "$SRC/sipvoice.service" > /etc/systemd/system/sipvoice.service
+    chmod 644 /etc/systemd/system/sipvoice.service
+    log "服务可写路径已包含 ${REC_DIR}"
+fi
 systemctl daemon-reload
 systemctl enable sipvoice >/dev/null 2>&1 || true
 systemctl restart sipvoice

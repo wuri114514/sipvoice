@@ -18,7 +18,10 @@ StandardError=journal
 # 基础加固
 PrivateTmp=yes
 ProtectSystem=full
-ReadWritePaths=/etc/sipvoice /opt/sipvoice/models /etc/asterisk /etc/default /etc/logrotate.d /data /var/log/asterisk /var/spool/asterisk
+# 注：ReadWritePaths 里列出的路径必须真实存在，否则 systemd 会以
+# status=226/NAMESPACE 拒绝启动。install.sh 会按实际录音目录重写这一行，
+# 这里只保留任何环境下都存在的路径。
+ReadWritePaths=/etc/sipvoice /opt/sipvoice/models /etc/asterisk /etc/default /etc/logrotate.d /var/log/asterisk /var/spool/asterisk /var/lib/sipvoice
 ProtectHome=yes
 
 [Install]
