@@ -3,9 +3,35 @@
 set -e
 
 case "$1" in
+    remove)
+        # 卸载但不删配置：停掉清理定时器，避免它继续指向已删除的脚本
+        if [ -f /etc/systemd/system/sipvoice-rec-cleanup.timer ]; then
+            systemctl disable --now sipvoice-rec-cleanup.timer >/dev/null 2>&1 || true
+        fi
+        systemctl daemon-reload >/dev/null 2>&1 || true
+        ;;
     purge)
+        # 停定时器与服务的残留
+        systemctl disable --now sipvoice-rec-cleanup.timer >/dev/null 2>&1 || true
+        systemctl stop sipvoice >/dev/null 2>&1 || true
+
+        # 包内安装的文件与配置
         rm -rf /etc/sipvoice /opt/sipvoice
+        rm -rf /usr/share/sipvoice
         rm -f /etc/sudoers.d/sipvoice-asterisk
+        rm -f /usr/local/sbin/sipvoice-rec-cleanup.sh
+        rm -f /usr/local/sbin/sipvoice-storage-apply.sh
+        rm -f /etc/systemd/system/sipvoice-rec-cleanup.service
+        rm -f /etc/systemd/system/sipvoice-rec-cleanup.timer
+        rm -f /etc/default/sipvoice-rec
+        # 日志轮转：只在确实是 SIPVoice 生成的那份时删除
+        if [ -f /etc/logrotate.d/asterisk ] && grep -q 'SIPVoice' /etc/logrotate.d/asterisk 2>/dev/null; then
+            rm -f /etc/logrotate.d/asterisk
+        fi
+
+        # 运行数据（录音、传真、生成过的提示音）
+        rm -rf /var/lib/sipvoice
+
         if id sipvoice >/dev/null 2>&1; then
             userdel sipvoice >/dev/null 2>&1 || true
         fi
