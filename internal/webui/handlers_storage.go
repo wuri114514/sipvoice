@@ -12,6 +12,15 @@ import (
 
 const storageApply = "/usr/local/sbin/sipvoice-storage-apply.sh"
 
+// defaultRecordingDir 返回本机实际使用的录音目录，判断规则与 deploy/install.sh 保持一致：
+// /data 是独立数据盘挂载点时用 /data/recordings，否则用 /var/lib/sipvoice/recordings。
+func defaultRecordingDir() string {
+	if fi, err := os.Stat("/data/recordings"); err == nil && fi.IsDir() {
+		return "/data/recordings"
+	}
+	return "/var/lib/sipvoice/recordings"
+}
+
 // storageStats 是磁盘占用情况。
 type storageStats struct {
 	Dir       string `json:"dir"`
@@ -43,7 +52,9 @@ func (s *Server) handleStorage(w http.ResponseWriter, r *http.Request) {
 	}
 	st := cfg.Storage
 	if st.RecordingDir == "" {
-		st.RecordingDir = "/data/recordings"
+		// 配置里没有 storage 块时（例如升级上来的旧配置），按实际的录音目录兜底：
+		// 有独立数据盘用 /data/recordings，否则用 /var/lib/sipvoice/recordings。
+		st.RecordingDir = defaultRecordingDir()
 	}
 	if st.QuotaGB <= 0 {
 		st.QuotaGB = 5
@@ -63,6 +74,10 @@ func (s *Server) handleStorage(w http.ResponseWriter, r *http.Request) {
 			stat.LogBytes = fi.Size()
 		}
 		stat.DiskFree, stat.DiskTotal = diskFree(st.RecordingDir)
+		if stat.DiskTotal == 0 {
+			// 录音目录还不存在时 Statfs 会失败，退回根分区，避免面板显示 0 B / 0 B
+			stat.DiskFree, stat.DiskTotal = diskFree("/")
+		}
 		writeJSON(w, map[string]any{"config": st, "stats": stat})
 	case http.MethodPost:
 		var in config.StorageConfig
