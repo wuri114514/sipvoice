@@ -150,7 +150,7 @@ func TestParseMessageOctetStreamImage(t *testing.T) {
 	png := []byte("\x89PNG\r\n\x1a\n" + strings.Repeat("x", 64))
 	cid := "05D899A1@33F2A96C.9748096B00000000"
 	raw := strings.Join([]string{
-		"From: WuRi <wuri@example.com>",
+		"From: Alice <alice@example.com>",
 		"To: fax@example.com",
 		"Subject: [FAX]",
 		"MIME-Version: 1.0",
