@@ -444,7 +444,9 @@
         <div class="field"><label>号码（分机号）</label><input id="ph-number" placeholder="1003"></div>
         <div class="field"><label>名称</label><input id="ph-name" placeholder="前台"></div>
         <div class="field"><label>密码（留空自动生成）</label><input id="ph-pass"></div>
-        <div class="field"><label>摘机直通号码（可选）</label><input id="ph-hotline" placeholder="9000"></div>
+        <div class="field"><label>摘机直通号码（可选）</label><input id="ph-hotline" placeholder="9000">
+          <div style="font-size:12px;color:var(--muted);line-height:1.55">网关侧配置项：本系统只把它写进「下载配置模板」的说明文字，<b>实际生效需在网关 Web 界面配 Offhook Auto Dial / Hotline</b>。摘机是网关侧的物理事件，Asterisk 收到 INVITE 才知道有呼叫，无法检测摘机。</div>
+        </div>
         <div class="field"><label>允许互播</label><select id="ph-intercall"><option value="true">允许</option><option value="false">禁止</option></select></div>
         <div class="field"><label>备注</label><input id="ph-note"></div>
         <div class="field"><label>收件邮箱（传真发不出去时用）</label><input id="ph-email" placeholder="留空用全局默认"></div>
