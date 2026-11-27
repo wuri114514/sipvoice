@@ -21,11 +21,21 @@ die()  { printf '\033[1;31m[错误]\033[0m %s\n' "$*" >&2; exit 1; }
 [ -x "$BIN_PATH" ] || die "未发现已安装的 $BIN_PATH，请先运行 install.sh"
 mkdir -p "$BACKUP"
 
+panel_port() {
+    # 面板端口可能被 drop-in 改过（ExecStart 里的 -web 0.0.0.0:PORT），
+    # 写死 8080 会在这种机器上误判「升级后未就绪」并自动回滚
+    local p
+    p=$(systemctl show -p ExecStart --value sipvoice 2>/dev/null \
+        | grep -oE '\-web [^ ]+' | grep -oE '[0-9]+$' | head -n1)
+    printf '%s' "${p:-8080}"
+}
+
 panel_ok() {
-    local code
-    code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 2 https://127.0.0.1:8080/api/status || true)
+    local port code
+    port=$(panel_port)
+    code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 2 "https://127.0.0.1:$port/api/status" || true)
     case "$code" in 200|401) return 0 ;; esac
-    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 http://127.0.0.1:8080/api/status || true)
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "http://127.0.0.1:$port/api/status" || true)
     case "$code" in 200|401) return 0 ;; esac
     return 1
 }

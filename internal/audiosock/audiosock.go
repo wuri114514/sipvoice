@@ -132,6 +132,13 @@ type Handler func(ctx context.Context, c *Conn) error
 
 // Serve 在 addr 上监听 AudioSocket 连接，每通电话一个 goroutine。
 func Serve(ctx context.Context, addr string, h Handler) error {
+	// 主叫号码映射目录：拨号方案以 asterisk 身份写入，这里以 sipvoice 身份读取。
+	// 目录不存在时通话仍能建立，只是会话/回拨会静默降级，所以只告警不阻断。
+	if err := EnsureCallmapDir(); err != nil {
+		log.Printf("[audiosock] 主叫号码映射目录不可用: %v（会话记忆与自动回拨会降级）", err)
+	}
+	go cleanCallmapLoop(ctx)
+
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("audiosock: listen %s: %w", addr, err)
@@ -197,6 +204,58 @@ func FormatUUID(b []byte) string {
 
 // CallmapDir 存放 uuid -> 主叫号码 的映射文件，由拨号方案写入。
 const CallmapDir = "/var/lib/sipvoice/callmap"
+
+// EnsureCallmapDir 建好映射目录，并确认它真的可写：拨号方案里的 System()
+// 以 asterisk 身份写，agent 以 sipvoice 身份读。目录缺失时通话照旧，
+// 只是主叫号码为空、会话与回拨静默降级。
+func EnsureCallmapDir() error { return ensureWritableDir(CallmapDir) }
+
+// ensureWritableDir 建目录并做一次写入探测。
+func ensureWritableDir(dir string) error {
+	if err := os.MkdirAll(dir, 0o777); err != nil {
+		return err
+	}
+	// 安装脚本可能已用 root 建好这个目录（0777），此时 chmod 会 EPERM，忽略即可；
+	// 真正决定成败的是「能不能写」，所以用一次写入探测代替权限判断。
+	_ = os.Chmod(dir, 0o777)
+	f, err := os.CreateTemp(dir, ".probe-*")
+	if err != nil {
+		return err
+	}
+	name := f.Name()
+	_ = f.Close()
+	_ = os.Remove(name)
+	return nil
+}
+
+// cleanCallmapLoop 定期清掉没被消费的映射文件（例如呼叫没走到 AudioSocket 就挂了），
+// 免得目录里越堆越多。取代早期版本依赖的 cron 清理。
+func cleanCallmapLoop(ctx context.Context) {
+	t := time.NewTicker(time.Minute)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			entries, err := os.ReadDir(CallmapDir)
+			if err != nil {
+				continue
+			}
+			cut := time.Now().Add(-10 * time.Minute)
+			for _, e := range entries {
+				if e.IsDir() {
+					continue
+				}
+				info, err := e.Info()
+				if err != nil || info.ModTime().After(cut) {
+					continue
+				}
+				_ = os.Remove(filepath.Join(CallmapDir, e.Name()))
+			}
+		}
+	}
+}
 
 // lookupCaller 按 UUID 读取主叫号码，读完即删。
 func lookupCaller(uuid string) string {

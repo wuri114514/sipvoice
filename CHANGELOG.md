@@ -2,6 +2,156 @@
 
 本项目从"电话能打通"一路做到"可发布"，版本号按 **主.次.修订 b构建** 递增。
 
+## v2.1.1 — 修复「邮局设置保存后不生效」
+
+现象：在「邮局设置」里填好 SMTP / IMAP，点保存或点测试，刷新后配置没了。
+
+三个原因叠在一起：
+
+1. **测试按钮不落盘**：`test-receive` / `test` 只在**成功**时才保存，失败直接 return。
+   用户填完点「测试收信」，IMAP 连不上（域名写错、授权码不对），刚填的服务器、
+   账号、授权码全部丢失，看起来就是"保存不了"。
+2. **缺块被当成清空**：`POST /api/mail` 是整份覆盖。升级前打开的旧页面提交的
+   配置里没有 `receive` 块，服务端解码成零值写回，把已存的收信配置抹掉。
+3. **面板 HTML 没有缓存指令**：面板是编译进二进制的，升级后浏览器可能继续用
+   旧页面（旧 JS 没有新字段、新按钮），点保存自然"没反应"。
+
+修复：
+
+- 保存按钮与两个测试按钮一律**先落盘、再执行**，测试失败也不丢用户输入；
+- 请求里缺少 `primary` / `backup` / `receive` 整块时保留原值，不再清零；
+- 面板 HTML 加 `Cache-Control: no-store`，升级后强制取新页面；
+- 保存 / 测试成功后回读服务器刷新界面（避免"看着像没保存"）；
+- 服务端每次保存记一行不含密码的摘要日志（`[webui] 邮件设置已保存（发信 …，收信 …）`），
+  以后排查直接看 journald；
+- 保存失败也写日志（此前静默）。
+
+回归测试：保存落盘、缺块保留原值、测试失败仍保存。
+
+## v2.1.0 — Email to Fax：邮件转传真
+
+新增一条入口：把图片用邮件发进来，自动变成传真打给指定分机。
+
+**触发规则**（三条同时满足）：
+
+- 邮件在配置的收信箱里是**未读**状态；
+- 主题里带 **`[FAX]`**（大小写不敏感）；
+- 发件人命中白名单（精确地址，或 `*@corp.com` 这种域通配）。
+
+**目标号码**写在正文的方括号里，例如「请发到 [2002] 谢谢」。多份附件按顺序合成多页传真。
+
+**图片处理**（ImageMagick，参数已固定，不依赖用户调）：
+
+自动定向 → 白底去透明 → 灰度 → 缩放并居中到 A4@204dpi（1728×2292）→
+对比度拉伸 2% → 轻锐化 → 55% 阈值二值化 → G4 压缩。
+手机拍的合同、彩色截图、灰底扫描件走一遍就是干净的黑白传真页；PDF 会按页栅格化。
+
+**发送**：复用已有 worker 传真队列，天然串行、失败重试与失败归档都沿用，不会和
+AI 主动发传真抢 Asterisk 通道。处理完的邮件标记为已读，失败入队的保持未读、下轮重试。
+
+**实现要点**：
+
+- 零第三方依赖：`internal/mail/imap.go` 是自写的最小 IMAP4rev1 客户端
+  （LOGIN / SELECT / UID SEARCH UNSEEN / UID FETCH BODY.PEEK[] / UID STORE \Seen），
+  并兼容网易 163/126 要求的 `ID` 命令（不发会被判 Unsafe Login）；
+- 解析用标准库 `net/mail` + `mime/multipart`，支持 base64 / quoted-printable、
+  嵌套 multipart、HTML-only 正文（去标签后取号码）；
+- 控制台「邮局设置」新增收信区：IMAP 服务器/端口/账号/授权码/信箱/轮询间隔/
+  白名单/标题关键字/附件上限，另有「测试收信」按钮做登录校验。
+
+**顺带修复**：`mail.json` 可能是安装时由 root 建的 0640 文件，服务以 sipvoice 身份
+直接覆盖会 permission denied（面板保存邮件设置一直会失败）。`mail.Store.Save` 改为
+「目录内临时文件 + rename」的原子写，既绕过权限问题，也避免面板保存与后台轮询
+同时写导致 JSON 被截断。
+
+已知限制：信箱名只支持 ASCII（`INBOX` 够用）；非 UTF-8（如 GBK）主题里的中文会显示乱码，
+但不影响 `[FAX]` 判定；不做 IDLE 推送，按设定的间隔轮询（最小 15 秒）。
+
+## v2.0.4 — 保存话机不再打断 AI 回拨与会话记忆
+
+现场现象：分机打 9000 说话正常，但之后 AI 不回拨；用户再打回来问「刚才那张图/那页传真」，
+AI 完全不记得。
+
+根因：控制台「话机」页保存时，`phones.Store.RenderExtensions()` 会**整份重写**
+`/etc/asterisk/extensions.conf`，而模板里缺了两样：
+
+- `[internal] 9000` 进 `AudioSocket` 之前没有写 `callmap/<uuid>` 主叫号码映射。
+  Go 侧 `c.Caller` 恒为空 → `agent.Handle` 不绑定会话（`session.enabled` 形同虚设），
+  `faxwatch` 也认不出传真是谁发的 → 既不写会话，也不排回拨任务，且全程无日志。
+- 文件末尾没有 `#include extensions_sipfax.conf`，`[fax-send]` / `[fax-callback]`
+  整体从运行中的拨号方案里消失，`worker` 的 `originate … reply@fax-callback` 必然失败。
+
+修复：
+
+- 话机模板固定写入 uuid → 主叫号码映射（`AUUID` / `ACALLER` / `System(...callmap...)`），
+  并始终 `#include extensions_sipfax.conf`；
+- `fax.ApplyDialplan` 现在同时生成 `[fax-send]` 与 `[fax-callback]`。此前回拨上下文
+  只存在于手工补丁里，保存一次传真页就会被删掉；
+- 保存话机后按当前传真配置重建一遍 `extensions_sipfax.conf`，两份文件的 include
+  关系不会再脱节；
+- `audiosock` 启动时自建 `/var/lib/sipvoice/callmap` 并起清理循环（10 分钟未消费即删），
+  不再依赖安装脚本或 cron 预置；
+- 安装自带的 `deploy/asterisk/extensions.conf` 同样补上主叫号码映射；
+- `upgrade.sh` 的面板健康检查按 `ExecStart` 里的实际 `-web` 端口探测。
+  之前写死 `8080`，用 drop-in 改过端口（如 `10390`）的机器升级后会误判
+  「未就绪」并自动回滚。
+
+回归测试：`internal/phones` 锁住「保存话机不能丢掉 callmap 与 include」，
+`internal/fax` 锁住「扩展文件必须同时含发送与回拨上下文、且 callmap 写在 AudioSocket 之前」。
+
+说明：本次不改传真收发协议。T.38 由对端能力协商，终端不支持时 Asterisk 自动回落
+G.711；`T.30 Non-ECM carrier not found` 属于链路/终端问题，与本次改动无关。
+
+## v2.0.3 — 部署可靠性修复（干净机器实测驱动）
+
+在全新安装的 Ubuntu 26.04.1（1 核 / 1.6 GB / 无独立数据盘）上从零部署时发现并修复：
+
+- **无数据盘时服务起不来**：`sipvoice.service` 的 `ReadWritePaths` 硬编码 `/data`，
+  该目录不存在时 systemd 以 `226/NAMESPACE` 拒绝启动，面板完全打不开。
+  改为只列通用路径，并由 `install.sh` 按实际录音目录追加。
+- **控制台读传真/录音报 permission denied**：Debian/Ubuntu 的
+  `/var/spool/asterisk` 属组为 root，`sipvoice` 即使加入 asterisk 组也缺 `x` 位
+  进不去子目录。`install.sh` 与 deb `postinst` 现会修正属组并补 `g+rx`。
+- **存储页显示 `/data/recordings` 与 `0 B / 0 B`**：`config.example.json` 无
+  `storage` 块时回落到写死默认值，且对不存在目录 `Statfs` 失败。
+  现在安装时按实际目录写入 `storage`，后端也做兜底。
+
+打包链路修复：
+- `scripts/package.sh` 补齐 `sipvoice.service`、`logrotate-asterisk`、存储脚本、
+  `systemd/` 单元与 `asterisk/deploy.sh`（此前缺失会导致 `install.sh` 中断），
+  并给脚本正确的执行位
+- `deploy/deb/postinst` 补齐 `usermod -aG asterisk`、目录权限、`storage` 初始化、
+  存储脚本与清理定时器部署、`storage-apply` 的 sudoers 条目
+- `scripts/build-deb.sh` 打包上述新文件；`control.in` 补 `ghostscript` 依赖
+- README 中英双版新增 `.deb` 安装章节，推荐 `apt install ./x.deb` 由 apt 解依赖
+
+实测：干净 Ubuntu 上 `tar -xzf` + `sudo bash install.sh` 70 秒完成，服务 active、
+控制台可登录、文件与磁盘显示正确；`apt install ./sipvoice_2.0.3_amd64.deb`
+安装后同样验证通过（版本、权限、storage、定时器、日志轮转全部正常）。
+
+## v2.0.2 — 面板保存不再覆盖其它区块
+
+- **修复**：在任意一页点「保存」会把其它页设置重置为默认值。
+  根因是 `payload()` 只拼装 `audio/ai/agent/realtime/notify` 五块后整份提交，
+  而服务端 `POST /api/config` 是覆盖语义，`session`、`storage`、`ai.vision_enabled`
+  以及开场问候相关的 agent 字段都不在提交体里，于是被解码成零值。
+  现在 `payload()` 以「已保存的完整配置」为底、只覆盖当前控件负责的字段。
+- **修复**：`agent.greeting` 在端到端模式下控件不可见时会被写成空串，改为沿用已保存值。
+- **修复**：不再硬编码 `notify.on_call_end=false`，改为保留原值。
+- 版本号 2.0.2。
+
+## v2.0.1 — 前后端一致性修复
+
+- **新增保存按钮**：语音页 ASR / TTS 区块、「通话 → 处理提示音 & 按键」、「服务商预设」
+  此前没有独立保存入口，改完就读不到；现在各自就地保存。
+- **温度生效**：对话链路改为读取配置里的 `temperature`（此前写死 0.7，面板调了无效）。
+  视觉分析仍固定 0.3，属预期行为。
+- **回拨开场白可用**：「生成回拨开场白」「试听」按钮此前未绑定事件，现已接上后端接口。
+- **主动回拨先询问**：`callback_policy=ask` 此前与「直接拨」等价，现改为先征询、拨不通再发通知。
+- **摘机直通生效**：`hotline` 此前只影响下载的模板文本，现真正生成摘机直拨。
+- **默认收件人清空**：`mail.DefaultNotifyTo` 不再预填作者个人邮箱，改为空值强制用户自填。
+- 版本号 2.0.1。
+
 ## v2.0.0 — 传真、异步会话与工作模式
 
 这是项目的一次大版本更新：新增 4 个子系统、近 2000 行核心代码，

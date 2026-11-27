@@ -239,6 +239,15 @@ func (w *Worker) finishFax(ctx context.Context, key string, t session.Task, dest
 		fmt.Sprintf("（系统提示：传真发送失败——%s）", res.Message), "fax")
 	w.Sessions.FinishTask(key, t.ID, true, res.Message)
 
+	// 用户按键 4 拒收：不再重试，直接通知（含归档路径）
+	if res.NoRetry {
+		if w.Notify != nil {
+			_ = w.Notify(ctx, "SIPVoice 传真未送出",
+				fmt.Sprintf("目标 %s\n原因：%s\n\n文件已归档，不再重试。", dest, res.Message))
+		}
+		return
+	}
+
 	maxAttempts := 2
 	if t.Attempts+1 >= maxAttempts {
 		if w.Notify != nil {

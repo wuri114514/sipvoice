@@ -16,6 +16,7 @@ import (
 	"sipvoice/internal/aibuild"
 	"sipvoice/internal/auth"
 	"sipvoice/internal/config"
+	"sipvoice/internal/mail"
 	"sipvoice/internal/models"
 	"sipvoice/internal/phones"
 	"sipvoice/internal/session"
@@ -143,6 +144,7 @@ type Options struct {
 	BackupDir      string
 	OnConfig       func(*config.Config) // 保存后回调，用于热更新 provider
 	Sessions       *session.Manager     // 异步会话（按主叫号码保留上下文）
+	MailPath       string               // 邮箱设置文件，默认 /etc/sipvoice/mail.json
 }
 
 // Server 是 WebUI 服务器。
@@ -255,11 +257,24 @@ func (s *Server) Restart() {
 	go s.listen()
 }
 
+// mailStore 返回邮箱设置存储；测试里可以把路径指到临时目录。
+func (s *Server) mailStore() *mail.Store {
+	p := s.opt.MailPath
+	if p == "" {
+		p = "/etc/sipvoice/mail.json"
+	}
+	return &mail.Store{Path: p}
+}
+
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
 	}
+	// 面板 HTML 是编译进二进制的：升级后浏览器必须拿新的，
+	// 否则旧页面会继续用旧的 JS（少字段、少按钮）去调新后端。
+	w.Header().Set("Cache-Control", "no-store, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write(indexHTML)
 }

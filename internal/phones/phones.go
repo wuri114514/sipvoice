@@ -142,18 +142,27 @@ func (s *Store) RenderPJSIP() string {
 		}
 		fmt.Fprintf(&b, "[%s]\ntype=endpoint\ncontext=ctx-%s\ndisallow=all\nallow=ulaw\nallow=alaw\n", p.Number, p.Number)
 		fmt.Fprintf(&b, "auth=%s-auth\naors=%s\ndirect_media=no\nforce_rport=yes\nrewrite_contact=yes\n", p.Number, p.Number)
-		b.WriteString("rtp_symmetric=yes\ndtmf_mode=rfc4733\ntransport=transport-udp\n\n")
+		b.WriteString("rtp_symmetric=yes\ndtmf_mode=auto\ntransport=transport-udp\n\n")
 		fmt.Fprintf(&b, "[%s-auth]\ntype=auth\nauth_type=userpass\nusername=%s\npassword=%s\n\n", p.Number, p.Number, p.Password)
 		fmt.Fprintf(&b, "[%s]\ntype=aor\nmax_contacts=3\nremove_existing=yes\nqualify_frequency=30\n\n", p.Number)
 	}
 
 	b.WriteString("[calltest]\ntype=endpoint\ncontext=internal\ndisallow=all\nallow=ulaw\ndirect_media=no\n")
-	b.WriteString("force_rport=yes\nrewrite_contact=yes\nrtp_symmetric=yes\ndtmf_mode=rfc4733\ntransport=transport-udp\n\n")
+	b.WriteString("force_rport=yes\nrewrite_contact=yes\nrtp_symmetric=yes\ndtmf_mode=auto\ntransport=transport-udp\n\n")
 	b.WriteString("[calltest-identify]\ntype=identify\nendpoint=calltest\nmatch=127.0.0.1\n")
 	return b.String()
 }
 
 // RenderExtensions 生成 extensions.conf 内容（含每台话机的互播策略）。
+//
+// 两个必须写进模板、不能只靠部署脚本或手工补丁的东西：
+//  1. 主叫号码映射。9000 进 AudioSocket 之前要把 "uuid -> 主叫号码" 写进
+//     /var/lib/sipvoice/callmap/，Go 侧按 uuid 读出来才能把通话绑定到会话、
+//     传真分析完才知道是谁发的（自动回拨依赖它）。少了这几行，
+//     agent 日志里就是 caller=""，会话与回拨整条链路静默失效。
+//  2. #include extensions_sipfax.conf。传真发送与 AI 回拨上下文在这个文件里，
+//     主文件每次重写都必须重新 include，否则「保存话机」会把它们从运行中的
+//     拨号方案里抹掉。
 func (s *Store) RenderExtensions() string {
 	all := s.List()
 	var b strings.Builder
@@ -167,7 +176,10 @@ func (s *Store) RenderExtensions() string {
 	b.WriteString(" same => n,Set(RECDIR=${DB(sipvoice/rec_dir)})\n")
 	b.WriteString(" same => n,GotoIf($[\"${DB(sipvoice/rec)}\" = \"1\" & \"${RECDIR}\" != \"\"]?rec:ai)\n")
 	b.WriteString(" same => n(rec),MixMonitor(${RECDIR}/${STRFTIME(${EPOCH},,%Y%m%d-%H%M%S)}-${CALLERID(num)}.wav)\n")
-	b.WriteString(" same => n(ai),AudioSocket(${SHELL(uuidgen | tr -d '\\n')},127.0.0.1:9092)\n")
+	b.WriteString(" same => n(ai),Set(AUUID=${SHELL(uuidgen | tr -d '\\n')})\n")
+	b.WriteString(" same => n,Set(ACALLER=${CALLERID(num)})\n")
+	b.WriteString(" same => n,System(/bin/sh -c 'echo ${ACALLER} > /var/lib/sipvoice/callmap/${AUUID}')\n")
+	b.WriteString(" same => n,AudioSocket(${AUUID},127.0.0.1:9092)\n")
 	b.WriteString(" same => n,Hangup()\n")
 	b.WriteString("exten => _+X.,1,Set(NUM=${EXTEN:1})\n same => n,Goto(internal,${NUM},1)\n")
 	b.WriteString("exten => 600,1,NoOp(SIPVoice fax receive, caller=${CALLERID(num)})\n")
@@ -197,6 +209,10 @@ func (s *Store) RenderExtensions() string {
 		}
 		b.WriteString("exten => _X.,1,Congestion()\n\n")
 	}
+
+	// 传真发送 + AI 回拨上下文由 fax.ApplyDialplan 生成到独立文件，
+	// 这里必须重新 include，否则保存话机会把它们抹掉。
+	b.WriteString("\n#include extensions_sipfax.conf\n")
 	return b.String()
 }
 

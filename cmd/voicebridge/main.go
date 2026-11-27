@@ -19,6 +19,7 @@ import (
 	"sipvoice/internal/auth"
 	"sipvoice/internal/calltest"
 	"sipvoice/internal/config"
+	"sipvoice/internal/mail"
 	"sipvoice/internal/mockai"
 	"sipvoice/internal/models"
 	"sipvoice/internal/notify"
@@ -32,7 +33,7 @@ import (
 	"sipvoice/internal/worker"
 )
 
-var version = "2.0.1"
+var version = "2.1.10"
 
 func main() {
 	var (
@@ -251,6 +252,18 @@ func runAgent(ctx context.Context, cfgPath, webAddr string) {
 		faxWorker.NotifyFaxArrived(ctx, key, summary)
 	})
 
+	// Email to Fax：轮询收信邮箱，把「[FAX] + 白名单发件人 + 正文[号码]」的邮件
+	// 里的图片转成传真，挂到 worker 的发传真任务上
+	mailStore := &mail.Store{Path: "/etc/sipvoice/mail.json"}
+	startMailFaxWatcher(ctx, mailStore, func(dest, file string) error {
+		sessMgr.Ensure(dest)
+		sessMgr.AddTask(dest, session.Task{
+			Type:   "fax",
+			Params: map[string]any{"dest": dest, "file": file},
+		})
+		return nil
+	})
+
 	store := webui.NewStore()
 	ag.Obs = store
 
@@ -319,6 +332,7 @@ func runAgent(ctx context.Context, cfgPath, webAddr string) {
 		ExtensionsConf: ex,
 		BackupDir:      "/etc/sipvoice/backups",
 		OnConfig:       buildProviders,
+		MailPath:       mailStore.Path,
 	})
 
 	aiDesc := cfg.AI.BaseURL

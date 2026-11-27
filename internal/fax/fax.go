@@ -165,12 +165,34 @@ func Save(c Config) error {
 	return os.WriteFile("/etc/sipvoice/fax.json", raw, 0o660)
 }
 
-// ApplyDialplan 生成传真发送用的拨号方案并 reload。
+// ApplyDialplan 生成传真发送/回拨用的拨号方案并 reload。
 // 接收分机（默认 600）由 phones 模板的 [internal] 负责，这里不再重复定义，
 // 否则会出现 "extension already in use" 冲突。
 func ApplyDialplan(c Config) error {
 	path := "/etc/asterisk/extensions_sipfax.conf"
 	ensureInclude()
+	if err := os.WriteFile(path, []byte(RenderDialplan(c)), 0o664); err != nil {
+		return err
+	}
+	_ = exec.Command("chgrp", "sipvoice", path).Run()
+	_ = os.Chmod(path, 0o664)
+
+	ecm := "1"
+	if !c.ECM {
+		ecm = "0"
+	}
+	_, _ = astCLI("database put sipvoice fax_ecm " + ecm)
+	_, _ = astCLI(fmt.Sprintf("database put sipvoice fax_ext %s", c.InboundExt))
+	_, _ = astCLI(fmt.Sprintf("database put sipvoice fax_wait %d", c.HangupDelay))
+
+	_, err := astCLI("dialplan reload")
+	return err
+}
+
+// RenderDialplan 生成 extensions_sipfax.conf 的完整内容：
+// [fax-send] 主动发传真，[fax-callback] AI 主动回拨。
+// 纯函数、不碰磁盘，便于回归测试（见 fax_test.go）。
+func RenderDialplan(c Config) string {
 	var b strings.Builder
 
 	b.WriteString("; 由 SIPVoice 控制台生成——传真发送拨号方案\n\n")
@@ -187,7 +209,10 @@ func ApplyDialplan(c Config) error {
 	if !c.ECM {
 		b.WriteString(" same => n,Set(FAXOPT(ecm)=no)\n")
 	}
-	b.WriteString(" same => n,SendFAX(${DB(sipvoice/faxfile)},d)\n")
+	// 通道已经由 originate 连接到目标，SendFAX 直接发到当前通道即可。
+	// 不能再带 d（拨号）：d 会按 FAXOPT(dest) 再拨一次，普通分机收不到，
+	// 而且 FAXOPT(dest) 若为空就直接「呼叫未能建立」。
+	b.WriteString(" same => n,SendFAX(${DB(sipvoice/faxfile)})\n")
 	b.WriteString(" same => n,Set(DB(sipvoice/faxresult)=${FAXOPT(status)}|页=${FAXOPT(pages)}|速率=${FAXOPT(rate)}|错误=${FAXOPT(error)})\n")
 	fmt.Fprintf(&b, " same => n,Wait(%d)\n", c.HangupDelay)
 	b.WriteString(" same => n,Hangup()\n")
@@ -201,22 +226,37 @@ func ApplyDialplan(c Config) error {
 	b.WriteString("exten => i,1,NoOp(忽略按键 ${EXTEN})\n")
 	b.WriteString(" same => n,Goto(fax-send,reply,1)\n")
 
-	if err := os.WriteFile(path, []byte(b.String()), 0o664); err != nil {
-		return err
-	}
-	_ = exec.Command("chgrp", "sipvoice", path).Run()
-	_ = os.Chmod(path, 0o664)
+	// ---- AI 主动回拨：开场白 → 传真摘要 → 滴声提示 → 滴 → 接进 AI ----
+	// 必须在这里就把 uuid -> 主叫号码写进 callmap 并打 .flag：
+	//   caller → agent 才能绑定到同一条会话（AI 才记得刚才那页传真/图片）；
+	//   .flag  → agent 跳过开场问候，播完摘要直接进对话。
+	b.WriteString("\n")
+	b.WriteString("; ---- AI 主动回拨：开场白 → 传真摘要 → 请滴声后继续 → 滴 → 接进 AI ----\n")
+	b.WriteString("[fax-callback]\n")
+	b.WriteString("exten => reply,1,NoOp(SIPVoice AI callback)\n")
+	b.WriteString(" same => n,Answer()\n")
+	b.WriteString(" same => n,Set(RECDIR=${DB(sipvoice/rec_dir)})\n")
+	b.WriteString(" same => n,GotoIf($[\"${DB(sipvoice/rec)}\" = \"1\" & \"${RECDIR}\" != \"\"]?rec:play)\n")
+	b.WriteString(" same => n(rec),MixMonitor(${RECDIR}/${STRFTIME(${EPOCH},,%Y%m%d-%H%M%S)}-callback.wav)\n")
+	b.WriteString(" same => n(play),Set(CBINTRO=${DB(sipvoice/callback_intro)})\n")
+	b.WriteString(" same => n,GotoIf($[\"${CBINTRO}\" != \"\"]?doIntro)\n")
+	b.WriteString(" same => n,Set(CBINTRO=/var/lib/sipvoice/prompts/callback-intro)\n")
+	b.WriteString(" same => n(doIntro),Playback(${CBINTRO})\n")
+	b.WriteString(" same => n,Set(CBSUM=${DB(sipvoice/callback_summary)})\n")
+	b.WriteString(" same => n,GotoIf($[\"${CBSUM}\" != \"\"]?doSum:prompt)\n")
+	b.WriteString(" same => n(doSum),Playback(${CBSUM})\n")
+	b.WriteString(" same => n(prompt),Set(BEEPPROMPT=${DB(sipvoice/beep_prompt)})\n")
+	b.WriteString(" same => n,GotoIf($[\"${BEEPPROMPT}\" != \"\"]?doPrompt)\n")
+	b.WriteString(" same => n,Set(BEEPPROMPT=/var/lib/sipvoice/prompts/beep-prompt)\n")
+	b.WriteString(" same => n(doPrompt),Playback(${BEEPPROMPT})\n")
+	b.WriteString(" same => n,Playback(beep)\n")
+	b.WriteString(" same => n,Set(AUUID=${SHELL(uuidgen | tr -d '\\n')})\n")
+	b.WriteString(" same => n,Set(ACALLER=${CALLERID(num)})\n")
+	b.WriteString(" same => n,System(/bin/sh -c 'echo ${ACALLER} > /var/lib/sipvoice/callmap/${AUUID}; echo callback > /var/lib/sipvoice/callmap/${AUUID}.flag')\n")
+	b.WriteString(" same => n,AudioSocket(${AUUID},127.0.0.1:9092)\n")
+	b.WriteString(" same => n,Hangup()\n")
 
-	ecm := "1"
-	if !c.ECM {
-		ecm = "0"
-	}
-	_, _ = astCLI("database put sipvoice fax_ecm " + ecm)
-	_, _ = astCLI(fmt.Sprintf("database put sipvoice fax_ext %s", c.InboundExt))
-	_, _ = astCLI(fmt.Sprintf("database put sipvoice fax_wait %d", c.HangupDelay))
-
-	_, err := astCLI("dialplan reload")
-	return err
+	return b.String()
 }
 
 // ensureInclude 确保 extensions.conf 里有对传真拨号文件的 include。
@@ -347,6 +387,7 @@ type SendResult struct {
 	Message  string `json:"message"`
 	Elapsed  int    `json:"elapsed_ms"`
 	Archived string `json:"archived,omitempty"` // 失败归档后的路径（有值说明源文件已被移走）
+	NoRetry  bool   `json:"no_retry,omitempty"` // true 表示不要再重试（如用户按键拒绝接收）
 }
 
 // Status 返回当前发送状态。
@@ -417,9 +458,11 @@ func Send(cfg Config, itemName, dest string) SendResult {
 	_, _ = astCLI("database del sipvoice faxresult")
 	_, _ = astCLI(fmt.Sprintf("database put sipvoice faxfile %s", src))
 	_, _ = astCLI(fmt.Sprintf("database put sipvoice faxdest %s", dest))
-	// 进入发送逻辑：Local/reply@fax-send 会执行 ReceiveFAX 的对应端 SendFAX，
-	// 由 SendFAX 自己负责呼叫目标（不能先拨目标再执行，方向会反）
-	if _, err := astCLI("channel originate Local/reply@fax-send extension s@dummy"); err != nil {
+	// 真实拨号到目标（PJSIP/ 分机或 Local/ 本机自测），接通后执行 fax-send/reply，
+	// 由 SendFAX 发到已连接的通道。不能用 Local/reply@fax-send extension s@dummy：
+	// 那个假通道没有对端，SendFAX 无处可发，永远「呼叫未能建立」。
+	orig := originateCmd(dest)
+	if _, err := astCLI(orig); err != nil {
 		return finish(false, "发起呼叫失败: "+err.Error(), start)
 	}
 
@@ -448,8 +491,11 @@ func Send(cfg Config, itemName, dest string) SendResult {
 
 	msg := ReadFaxResult()
 	if strings.Contains(msg, "USER_NO_FAX") {
+		// 用户按键 4 明确拒收：归档、发通知，但绝不再重试，避免反复骚扰。
 		out := HandleNoFaxPath(cfg, src, dest, "用户按键拒绝接收")
-		return finishArchived(out.Message, start, out.FailedDir)
+		r := finishArchived(out.Message, start, out.FailedDir)
+		r.NoRetry = true
+		return r
 	}
 	if strings.Contains(msg, "SUCCESS") {
 		return finish(true, "发送成功 "+msg, start)

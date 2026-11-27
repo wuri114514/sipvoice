@@ -27,6 +27,8 @@ type Settings struct {
 	ReplyPDF bool   `json:"reply_pdf"` // 附件用 PDF（否则用 TIFF）
 	LastTest string `json:"last_test"` // 最近一次测试结果
 	LastOK   bool   `json:"last_ok"`
+	// Receive 是「收信转传真」的收信设置
+	Receive ReceiveConfig `json:"receive"`
 }
 
 // DefaultSettings 返回默认设置。
@@ -37,6 +39,7 @@ func DefaultSettings() Settings {
 		Enabled:  true,
 		NotifyTo: DefaultNotifyTo,
 		ReplyPDF: true,
+		Receive:  DefaultReceiveConfig(),
 	}
 }
 
@@ -48,6 +51,7 @@ func (s *Settings) Normalize() {
 	if s.NotifyTo == "" {
 		s.NotifyTo = DefaultNotifyTo
 	}
+	s.Receive.Normalize()
 }
 
 // SendWithFallback 先主后备，任一成功即返回。
@@ -88,8 +92,13 @@ func (st *Store) Load() Settings {
 	return s
 }
 
-// Save 保存设置（0600，含授权码）。
-func (st *Store) Save(s Settings) error {
+// Save 原子写入设置（先写临时文件再 rename）。
+//
+// /etc/sipvoice 是 root:sipvoice 2770，而 mail.json 可能是 install 时由 root 建的
+// 0640 文件。服务以 sipvoice 身份运行时，直接 os.WriteFile 覆盖会被 permission denied；
+// 改成「目录内建临时文件 + rename」只需要目录可写，顺便也避免了
+// 面板保存与后台轮询同时写导致 JSON 被截断。
+func (st *Store) Save(s Settings) (err error) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	s.Normalize()
@@ -99,7 +108,27 @@ func (st *Store) Save(s Settings) error {
 	}
 	dir := filepath.Dir(st.Path)
 	_ = os.MkdirAll(dir, 0o770)
-	return os.WriteFile(st.Path, raw, 0o600)
+
+	tmp, err := os.CreateTemp(dir, ".mail-*.json")
+	if err != nil {
+		// 目录也写不了的话，退回到直接覆盖（老行为）
+		return os.WriteFile(st.Path, raw, 0o600)
+	}
+	name := tmp.Name()
+	defer func() {
+		if err != nil {
+			_ = os.Remove(name)
+		}
+	}()
+	if _, err = tmp.Write(raw); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err = tmp.Close(); err != nil {
+		return err
+	}
+	_ = os.Chmod(name, 0o600)
+	return os.Rename(name, st.Path)
 }
 
 // SetLastTest 记录测试结果。
@@ -107,5 +136,13 @@ func (st *Store) SetLastTest(msg string, ok bool) {
 	s := st.Load()
 	s.LastTest = msg
 	s.LastOK = ok
+	_ = st.Save(s)
+}
+
+// SetReceiveStatus 记录一次收信轮询的结果（面板只读展示）。
+func (st *Store) SetReceiveStatus(polledAt, result string) {
+	s := st.Load()
+	s.Receive.LastPoll = polledAt
+	s.Receive.LastResult = result
 	_ = st.Save(s)
 }

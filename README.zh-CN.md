@@ -1,4 +1,4 @@
-# SIPVoice · 轻量 SIP 语音 AI 网关
+﻿# SIPVoice · 轻量 SIP 语音 AI 网关
 
 ![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go&logoColor=white)
 ![Platform](https://img.shields.io/badge/platform-linux%2Famd64%20%7C%20linux%2Farm64-lightgrey)
@@ -28,7 +28,7 @@
   - 端到端：Qwen-Omni-Realtime（WebSocket），音频直接进模型、边生成边回放，**首包约 0.5 秒**
 - 🖥️ **Web 控制台**：服务商预设、在线拉取模型、TTS 试听、ASR 上传/录音识别、话机台账、系统监控
 - 🔔 **告警推送**：ServerChan 转发微信（启动 / 云端失败 / 磁盘不足）
-- 📠 传真收发（T.38 / G.711，落 TIFF，可转 PDF 下载）
+- 📠 传真收发（T.38 / G.711，落 TIFF，可转 PDF 下载），支持邮件转传真（Email to Fax）
 
 ## 架构
 
@@ -138,6 +138,27 @@ sudo systemctl restart sipvoice
 - 如果你原本为 8080 开了防火墙，记得同步放行新端口
 - 想改回默认值：删掉该 drop-in 文件后 `systemctl daemon-reload && systemctl restart sipvoice`
 
+## 安装包（.deb）
+
+适用于 Ubuntu / Debian。`.deb` 里已声明全部依赖，**用 apt 安装最省事**
+（直接 `dpkg -i` 在依赖缺失时会报错中止，之后还得 `apt install -f` 收尾）：
+
+```bash
+# 推荐：apt 自动装齐依赖
+sudo apt install ./sipvoice_2.0.4_amd64.deb
+
+# 或先装依赖再 dpkg
+sudo apt install -y asterisk asterisk-config ffmpeg curl ca-certificates sudo \
+    uuid-runtime libtiff-tools imagemagick ghostscript paps fonts-noto-cjk
+sudo dpkg -i sipvoice_2.0.4_amd64.deb
+```
+
+安装后：
+
+- 服务 `sipvoice` 自动注册并开机自启，控制台 `https://<主机IP>:8080`（首次访问创建管理员）
+- 配置在 `/etc/sipvoice/`，卸载用 `sudo apt purge sipvoice`（`apt remove` 保留配置）
+- 录音落在 `/var/lib/sipvoice/recordings`（无独立数据盘时），清理定时器自动启用
+
 ## Docker
 
 一个镜像里同时包含 Asterisk 和 voicebridge。**强烈建议用 host 网络**——SIP 与 RTP 在 Docker NAT
@@ -200,6 +221,21 @@ docker run -d --name sipvoice \
 - 内置纯 Go 发信（不依赖 msmtp/sendmail），支持 SSL 465 / STARTTLS 587
 - 主邮局 + 备用邮局，主用失败自动切换
 - 面板「邮局设置」里填服务器、账号、授权码，可一键「发送测试邮件」
+
+**Email to Fax（邮件转传真）**
+- 面板「邮局设置 → 收信转传真」里填 IMAP 服务器、账号、授权码与**发件人白名单**
+- 发一封主题带 **`[FAX]`** 的邮件给这个信箱，正文里写 **`[2002]`** 指定目标分机，
+  附件放图片（jpg/png/gif/bmp/webp/tif）或 PDF
+- 服务端自动把图片做黑白化增强（自动定向、去灰底、拉伸对比度、锐化、二值化），
+  按 A4@204dpi 合成多页 TIFF 后传真出去；处理过会标记已读
+- 轮询间隔最小 15 秒；「测试收信」按钮可以先验证 IMAP 账号通不通
+
+```text
+主题：[FAX] 合同三页
+正文：请发到 [2002]，谢谢。
+附件：scan-1.jpg  scan-2.jpg  scan-3.jpg
+```
+
 ## 存储与日志
 
 面板「存储」页可以直接改这些设置，改完点「保存并应用」即可生效（不用登服务器）：

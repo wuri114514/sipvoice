@@ -16,17 +16,24 @@ if [ ! -f "$BIN" ]; then
 fi
 
 rm -rf "$PKG"
-mkdir -p "$PKG"
+mkdir -p "$PKG/asterisk" "$PKG/systemd"
 install -m 755 "$BIN" "$PKG/voicebridge"
-install -m 644 "$ROOT/deploy/install.sh" "$PKG/install.sh"
-install -m 644 "$ROOT/deploy/upgrade.sh" "$PKG/upgrade.sh"
-install -m 644 "$ROOT/deploy/uninstall.sh" "$PKG/uninstall.sh"
+# 安装/升级/卸载与存储脚本需要可执行位（用户按 README 直接 sudo bash 也可以，
+# 但 chmod +x 后与 Linux 上打包的结果保持一致）
+install -m 755 "$ROOT/deploy/install.sh" "$PKG/install.sh"
+install -m 755 "$ROOT/deploy/upgrade.sh" "$PKG/upgrade.sh"
+install -m 755 "$ROOT/deploy/uninstall.sh" "$PKG/uninstall.sh"
+install -m 755 "$ROOT/deploy/sipvoice-rec-cleanup.sh" "$PKG/sipvoice-rec-cleanup.sh"
+install -m 755 "$ROOT/deploy/sipvoice-storage-apply.sh" "$PKG/sipvoice-storage-apply.sh"
 install -m 644 "$ROOT/deploy/sipvoice.service" "$PKG/sipvoice.service"
+install -m 644 "$ROOT/deploy/logrotate-asterisk" "$PKG/logrotate-asterisk"
 install -m 644 "$ROOT/deploy/config.example.json" "$PKG/config.example.json"
 install -m 644 "$ROOT/LICENSE" "$PKG/LICENSE"
 install -m 644 "$ROOT/THIRD_PARTY_NOTICES.md" "$PKG/THIRD_PARTY_NOTICES.md"
-mkdir -p "$PKG/asterisk"
+install -m 755 "$ROOT/deploy/asterisk/deploy.sh" "$PKG/asterisk/deploy.sh"
 install -m 644 "$ROOT/deploy/asterisk/"*.conf "$PKG/asterisk/"
+install -m 644 "$ROOT/deploy/systemd/sipvoice-rec-cleanup.service" "$PKG/systemd/"
+install -m 644 "$ROOT/deploy/systemd/sipvoice-rec-cleanup.timer" "$PKG/systemd/"
 
 cat > "$PKG/README.txt" <<EOF
 SIPVoice $VERSION (linux-$ARCH)

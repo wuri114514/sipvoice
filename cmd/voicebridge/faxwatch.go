@@ -132,9 +132,18 @@ func (w *faxWatcher) scan(ctx context.Context) {
 	}
 }
 
-// callerOf 从文件名里取主叫号码：20261125-073923-1003.tiff → 1003
+// callerOf 从文件名里取「这封传真是谁发来的」。
+//
+//   - 接收的传真：20261125-073923-1003.tiff → 1003（第三段是主叫号码）
+//   - 本机生成的发出件（mail- / ai- 前缀）：没有主叫，返回空，
+//     否则会把文件名里的时间戳误当成号码去回拨。
 func callerOf(name string) string {
 	base := strings.TrimSuffix(strings.TrimSuffix(name, ".tiff"), ".tif")
+	// 自己生成的发出件没有「来电方」，不该触发回拨
+	low := strings.ToLower(base)
+	if strings.HasPrefix(low, "mail-") || strings.HasPrefix(low, "ai-") {
+		return ""
+	}
 	parts := strings.Split(base, "-")
 	if len(parts) >= 3 {
 		return parts[2]

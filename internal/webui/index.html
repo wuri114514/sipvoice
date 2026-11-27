@@ -640,6 +640,31 @@
         <div class="field"><label>账号</label><input id="mail_b_user" placeholder="user@189.cn"></div>
         <div class="field"><label>授权码（*** 表示不修改）</label><input id="mail_b_pass" type="password" placeholder="留空保持不变"></div>
       </div>
+      <h3 style="margin-top:16px;font-size:14px">收信转传真（Email to Fax）</h3>
+      <div class="grid">
+        <div class="field"><label>启用收信</label>
+          <select id="rx_enabled"><option value="false">关闭</option><option value="true">开启</option></select>
+        </div>
+        <div class="field"><label>IMAP 服务器</label><input id="rx_host" placeholder="imap.163.com"></div>
+        <div class="field"><label>端口 / 加密</label>
+          <div class="inline"><input id="rx_port" type="number" value="993" style="width:90px">
+            <select id="rx_ssl" style="width:120px"><option value="true">SSL</option><option value="false">明文</option></select></div>
+        </div>
+        <div class="field"><label>账号</label><input id="rx_user" placeholder="fax@163.com"></div>
+        <div class="field"><label>授权码（*** 表示不修改）</label><input id="rx_pass" type="password" placeholder="留空保持不变"></div>
+        <div class="field"><label>信箱</label><input id="rx_box" placeholder="INBOX"></div>
+        <div class="field"><label>轮询间隔（秒）</label><input id="rx_poll" type="number" min="15" max="3600" value="60"></div>
+        <div class="field"><label>允许的发件人（逗号分隔，支持 *@域名）</label><input id="rx_allow" placeholder="me@163.com, *@corp.com"></div>
+        <div class="field"><label>标题关键字</label><input id="rx_tag" placeholder="[FAX]"></div>
+        <div class="field"><label>单封附件上限（MB）</label><input id="rx_max" type="number" min="1" max="50" value="10"></div>
+      </div>
+      <div class="msg">规则：主题含 <b>[FAX]</b> + 发件人在白名单 + 正文里有 <b>[号码]</b>（例如 <code>请发到 [2002]</code>）。
+        命中的邮件会把图片/PDF 附件自动黑白化、按 A4@204dpi 合成多页 TIFF 后传真出去；处理过会标记已读。</div>
+      <div class="row">
+        <button class="ghost" id="rx-test">测试收信</button>
+        <span class="msg" id="rx-msg"></span>
+        <span class="msg" id="rx-status"></span>
+      </div>
       <div class="row">
         <button class="primary" id="mail-save">保存</button>
         <button class="ghost" id="mail-test">发送测试邮件</button>
@@ -722,7 +747,7 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   if(b.dataset.tab==='call') loadSessions();
   if(b.dataset.tab==='fax') loadFax();
   if(b.dataset.tab==='ai') loadUploads();
-  if(b.dataset.tab==='system') loadSecurity();
+  if(b.dataset.tab==='system'){ loadSecurity(); loadMail(); }
 });
 
 let cfg=null;
@@ -989,26 +1014,45 @@ $('fax-save2').onclick=async()=>{
 };
 
 // ---- 邮局设置 ----
+// 注意：每个元素都要判空。任何一个 id 不存在时直接抛异常，
+// 会让后面所有字段都来不及回填，表现为「刷新后输入框全空」。
 async function loadMail(){
+  const setv=(id,v)=>{ const el=$(id); if(el) el.value=v; };
   try{
     const r=await api('/api/mail');
     const s=r.settings||{}, p=s.primary||{}, b=s.backup||{};
-    $('mail_enabled').value=String(s.enabled!==false);
-    $('mail_notify_to').value=s.notify_to||'';
-    $('mail_pdf').value=String(s.reply_pdf!==false);
-    $('mail_p_host').value=p.host||'';
-    $('mail_p_port').value=p.port||465;
-    $('mail_p_ssl').value=String(p.ssl!==false);
-    $('mail_p_user').value=p.username||'';
-    $('mail_p_pass').value=p.password||'';
-    $('mail_p_name').value=p.from_name||'SIPVoice';
-    $('mail_b_host').value=b.host||'';
-    $('mail_b_port').value=b.port||465;
-    $('mail_b_ssl').value=String(b.ssl!==false);
-    $('mail_b_user').value=b.username||'';
-    $('mail_b_pass').value=b.password||'';
-    if(s.last_test){ $('mail-msg').textContent=s.last_test; $('mail-msg').style.color=s.last_ok?'var(--ok)':'var(--bad)'; }
-  }catch(e){$('mail-msg').textContent='读取失败: '+e.message}
+    setv('mail_enabled',String(s.enabled!==false));
+    setv('mail_notify_to',s.notify_to||'');
+    setv('mail_pdf',String(s.reply_pdf!==false));
+    setv('mail_p_host',p.host||'');
+    setv('mail_p_port',p.port||465);
+    setv('mail_p_ssl',String(p.ssl!==false));
+    setv('mail_p_user',p.username||'');
+    setv('mail_p_pass',p.password||'');
+    setv('mail_p_name',p.from_name||'SIPVoice');
+    setv('mail_b_host',b.host||'');
+    setv('mail_b_port',b.port||465);
+    setv('mail_b_ssl',String(b.ssl!==false));
+    setv('mail_b_user',b.username||'');
+    setv('mail_b_pass',b.password||'');
+    const rx=s.receive||{};
+    setv('rx_enabled',String(!!rx.enabled));
+    setv('rx_host',rx.host||'');
+    setv('rx_port',rx.port||993);
+    setv('rx_ssl',String(rx.ssl!==false));
+    setv('rx_user',rx.username||'');
+    setv('rx_pass',rx.password||'');
+    setv('rx_box',rx.mailbox||'INBOX');
+    setv('rx_poll',rx.poll_seconds||60);
+    setv('rx_allow',(rx.from_allow||[]).join(', '));
+    setv('rx_tag',rx.subject_tag||'[FAX]');
+    setv('rx_max',rx.max_attach_mb||10);
+    if(rx.last_poll||rx.last_result){
+      const el=$('rx-status');
+      if(el){ el.textContent='上次轮询 '+(rx.last_poll||'?')+'：'+(rx.last_result||''); el.style.color=''; }
+    }
+    if(s.last_test){ const el=$('mail-msg'); if(el){ el.textContent=s.last_test; el.style.color=s.last_ok?'var(--ok)':'var(--bad)'; } }
+  }catch(e){ const el=$('mail-msg'); if(el) el.textContent='读取失败: '+e.message; }
 }
 function mailBody(){
   return {enabled:$('mail_enabled').value==='true',
@@ -1020,7 +1064,19 @@ function mailBody(){
       from_name:$('mail_p_name').value.trim()||'SIPVoice'},
     backup:{host:$('mail_b_host').value.trim(),port:parseInt($('mail_b_port').value)||465,
       ssl:$('mail_b_ssl').value==='true',username:$('mail_b_user').value.trim(),
-      password:$('mail_b_pass').value,from:$('mail_b_user').value.trim(),from_name:'SIPVoice'}};
+      password:$('mail_b_pass').value,from:$('mail_b_user').value.trim(),from_name:'SIPVoice'},
+    receive:{enabled:$('rx_enabled').value==='true',
+      host:$('rx_host').value.trim(),
+      port:parseInt($('rx_port').value)||993,
+      ssl:$('rx_ssl').value==='true',
+      username:$('rx_user').value.trim(),
+      password:$('rx_pass').value,
+      mailbox:$('rx_box').value.trim()||'INBOX',
+      poll_seconds:parseInt($('rx_poll').value)||60,
+      from_allow:$('rx_allow').value.split(',').map(x=>x.trim()).filter(Boolean),
+      subject_tag:$('rx_tag').value.trim()||'[FAX]',
+      mark_seen:true,
+      max_attach_mb:parseInt($('rx_max').value)||10}};
 }
 $('mail-save').onclick=async()=>{
   $('mail-msg').textContent='保存中…';
@@ -1028,6 +1084,7 @@ $('mail-save').onclick=async()=>{
     const r=await api('/api/mail',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'save',settings:mailBody()})});
     $('mail-msg').textContent=r.message||'';
     $('mail-msg').style.color=r.ok?'var(--ok)':'var(--bad)';
+    if(r.ok) loadMail();   // 回读服务器，确认真的写进去了
   }catch(e){$('mail-msg').textContent='保存失败: '+e.message;$('mail-msg').style.color='var(--bad)'}
 };
 $('mail-test').onclick=async()=>{
@@ -1036,8 +1093,17 @@ $('mail-test').onclick=async()=>{
     const r=await api('/api/mail',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'test',to:$('mail_notify_to').value.trim(),settings:mailBody()})});
     $('mail-msg').textContent=r.message||'';
     $('mail-msg').style.color=r.ok?'var(--ok)':'var(--bad)';
-    if(r.ok) loadMail();
+    loadMail();
   }catch(e){$('mail-msg').textContent='发送失败: '+e.message;$('mail-msg').style.color='var(--bad)'}
+};
+$('rx-test').onclick=async()=>{
+  $('rx-msg').textContent='正在连接 IMAP…';$('rx-msg').style.color='';
+  try{
+    const r=await api('/api/mail',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'test-receive',settings:mailBody()})});
+    $('rx-msg').textContent=r.message||'';
+    $('rx-msg').style.color=r.ok?'var(--ok)':'var(--bad)';
+    loadMail();
+  }catch(e){$('rx-msg').textContent='连接失败: '+e.message;$('rx-msg').style.color='var(--bad)'}
 };
 
 $('fax-send').onclick=async()=>{  const file=$('fax-send-file').value, dest=$('fax-send-dest').value.trim();
@@ -1410,13 +1476,19 @@ async function loadConfig(){
   applyMode(cfg);
 }
 
+// payload 以「已保存的完整配置」为底，只覆盖本页控件负责的字段。
+// 这样在某一页点「保存」不会把其它页的设置（开场白/会话/存储/视觉开关等）重置成默认值。
 function payload(){
-  const base=cfg||{};
-  const ai=(base.ai)||{};
-  return {
-    audio:{listen:$('audio_listen').value.trim()||'127.0.0.1:9092'},
-    ai:{
-      provider:$('provider').value,
+  const base=(typeof cfg!=='undefined'&&cfg)?cfg:{};
+  const clone=o=>o?JSON.parse(JSON.stringify(o)):{};
+  const view=clone(base);
+  const ai=view.ai=view.ai||{};
+  // 这几个面板可能不可见（端到端模式），此时沿用已保存值，不能读隐藏控件
+  const stagedGiven=$('chat_base')&&$('chat_base').offsetParent!==null;
+  return Object.assign(view,{
+    audio:Object.assign(view.audio||{},{listen:$('audio_listen').value.trim()||'127.0.0.1:9092'}),
+    ai:Object.assign(ai,{
+      provider:stagedGiven?($('provider').value||ai.provider||''):(ai.provider||''),
       base_url:$('chat_base').value.trim(),
       api_key:$('chat_key').value.trim(),
       chat_model:$('chat_model').value.trim(),
@@ -1439,9 +1511,10 @@ function payload(){
       tts_base_url:$('tts_base').value.trim(),
       tts_api_key:$('tts_key').value.trim(),
       tts_model:$('tts_model_cloud').value.trim()
-    },
-    agent:{
-      greeting:$('greeting').value,      max_utterance_seconds:+$('max_utterance_seconds').value||15,
+    }),
+    agent:Object.assign(view.agent||{},{
+      greeting:$('greeting')?$('greeting').value:(view.agent||{}).greeting||'',
+      max_utterance_seconds:+$('max_utterance_seconds').value||15,
       silence_ms:+$('silence_ms').value||700,
       min_speech_ms:+$('min_speech_ms').value||200,
       energy_threshold:+$('energy_threshold').value||700,
@@ -1459,29 +1532,27 @@ function payload(){
         interrupt:$('dtmf_interrupt').value||'0',
         hangup:$('dtmf_hangup').value||'9'
       }
-    },
-    realtime:{
+    }),
+    realtime:Object.assign(view.realtime||{},{
       enabled:$('rt_enabled').value==='true',
       model:$('rt_model').value.trim(),
       voice:$('rt_voice').value.trim(),
       api_key:$('rt_key').value.trim(),
       base_url:$('rt_base').value.trim(),
       instructions:$('rt_instructions').value
-    },
-    notify:{
+    }),
+    notify:Object.assign(view.notify||{},{
       enabled:$('notify_enabled').value==='true',
       serverchan_key:$('notify_key').value.trim(),
       min_interval_ms:Math.round((parseFloat($('notify_interval').value)||5)*60000),
       on_startup:$('notify_startup').checked,
       on_error:$('notify_error').checked,
       on_disk:$('notify_disk').checked,
-      on_call_end:false,
-      mail_enabled:$('notify_mail_enabled')?$('notify_mail_enabled').value==='true':false,
-      mail_subject:$('notify_mail_subject')?$('notify_mail_subject').value.trim():'',
-      mail_body:$('notify_mail_body')?$('notify_mail_body').value:''
-    }
-  };
-
+      mail_enabled:$('notify_mail_enabled')?$('notify_mail_enabled').value==='true':(view.notify||{}).mail_enabled||false,
+      mail_subject:$('notify_mail_subject')?$('notify_mail_subject').value.trim():(view.notify||{}).mail_subject||'',
+      mail_body:$('notify_mail_body')?$('notify_mail_body').value:(view.notify||{}).mail_body||''
+    })
+  });
 }
 
 async function saveConfig(msgEl){

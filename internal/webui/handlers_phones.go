@@ -2,9 +2,11 @@ package webui
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 
+	"sipvoice/internal/fax"
 	"sipvoice/internal/phones"
 )
 
@@ -68,10 +70,19 @@ func (s *Server) handlePhones(w http.ResponseWriter, r *http.Request) {
 func (s *Server) applyPhoneConfig() error {
 	pj := s.opt.Phones.RenderPJSIP()
 	ex := s.opt.Phones.RenderExtensions()
-	return phones.Apply(map[string]string{
+	if err := phones.Apply(map[string]string{
 		s.opt.PJSIPConf:      pj,
 		s.opt.ExtensionsConf: ex,
-	}, s.opt.BackupDir)
+	}, s.opt.BackupDir); err != nil {
+		return err
+	}
+	// 主文件里 include 了 extensions_sipfax.conf。话机模板会整份重写主文件，
+	// 所以这里按当前传真配置把 [fax-send] / [fax-callback] 一起重建，
+	// 保证「保存话机」既不会丢掉主叫号码映射，也不会把回拨上下文留成旧版本。
+	if err := fax.ApplyDialplan(fax.Load()); err != nil {
+		log.Printf("[webui] 保存话机后重建传真/回拨拨号方案失败: %v", err)
+	}
+	return nil
 }
 
 func (s *Server) handlePhoneTemplate(w http.ResponseWriter, r *http.Request) {

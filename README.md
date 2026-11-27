@@ -1,4 +1,4 @@
-# SIPVoice · Lightweight SIP Voice AI Gateway
+﻿# SIPVoice · Lightweight SIP Voice AI Gateway
 
 ![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go&logoColor=white)
 ![Platform](https://img.shields.io/badge/platform-linux%2Famd64%20%7C%20linux%2Farm64-lightgrey)
@@ -34,7 +34,7 @@ No public IP, no vendor cloud, no monthly platform fee — a single Go binary th
 - 🖥️ **Web console**: provider presets, live model list, TTS preview, ASR upload/record test,
   phone extension inventory, system monitor
 - 🔔 **Alerts**: ServerChan push to WeChat (startup / cloud errors / low disk)
-- 📠 Fax send/receive (T.38 / G.711, saved as TIFF, PDF convertible)
+- 📠 Fax send/receive (T.38 / G.711, TIFF, PDF convertible) + Email to Fax
 
 ## Architecture
 
@@ -144,6 +144,30 @@ Notes:
 - the TLS certificate is bound to the host name, not the port — no need to regenerate it
 - open the new port in your firewall if you had one for 8080
 
+## Package (.deb)
+
+For Ubuntu / Debian. The `.deb` declares all dependencies — **install it with apt**
+(`dpkg -i` aborts when dependencies are missing and needs `apt install -f` afterwards):
+
+```bash
+# recommended: apt resolves dependencies
+sudo apt install ./sipvoice_2.0.4_amd64.deb
+
+# or install dependencies first, then dpkg
+sudo apt install -y asterisk asterisk-config ffmpeg curl ca-certificates sudo \
+    uuid-runtime libtiff-tools imagemagick ghostscript paps fonts-noto-cjk
+sudo dpkg -i sipvoice_2.0.4_amd64.deb
+```
+
+After installing:
+
+- the `sipvoice` service is registered and enabled, console at `https://<host-ip>:8080`
+  (create the admin account on first visit)
+- config lives in `/etc/sipvoice/`; uninstall with `sudo apt purge sipvoice`
+  (`apt remove` keeps the config)
+- recordings go to `/var/lib/sipvoice/recordings` when there is no separate data disk,
+  and the cleanup timer is enabled automatically
+
 ## Docker
 
 A single image contains Asterisk + voicebridge. **Host networking is strongly recommended** — SIP and
@@ -204,6 +228,21 @@ Each extension can carry its own mailbox; otherwise the global default is used.
 
 **Mail** — built-in Go SMTP client (no msmtp/sendmail needed), SSL 465 and STARTTLS 587 with
 automatic fallback, primary + backup provider, and a one-click "send test mail" button.
+
+**Email to Fax** — configure an IMAP mailbox plus a **sender allowlist** under
+"Mail settings → Email to Fax" (console: *邮局设置 → 收信转传真*). Mail a message whose subject
+contains **`[FAX]`** and whose body names the destination in brackets, e.g. `[2002]`, with
+images (jpg/png/gif/bmp/webp/tif) or PDFs attached. Attachments are auto-binarised and enhanced
+(auto-orient, background clean-up, contrast stretch, sharpen, threshold), composed into a
+multi-page A4@204dpi TIFF, then sent through the normal fax queue. Processed mail is marked read;
+polling is at least every 15 s and the "test receive" button validates the IMAP login.
+
+```text
+Subject: [FAX] Contract, 3 pages
+Body:    Please send to [2002]. Thanks.
+Attach:  scan-1.jpg  scan-2.jpg  scan-3.jpg
+```
+
 ## Storage & logs
 
 The **Storage** tab in the console controls all of this — no server access needed:

@@ -1,4 +1,4 @@
-# 构建产物
+﻿# 构建产物
 /dist/
 /release/
 
@@ -22,6 +22,5 @@ Thumbs.db
 
 # 编译产物
 /voicebridge
-/dist/
 /voicebridge-linux-*
-*.exe
+
