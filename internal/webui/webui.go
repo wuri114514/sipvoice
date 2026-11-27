@@ -202,6 +202,8 @@ func Start(opt Options) *Server {
 	mux.HandleFunc("/api/session/task", s.handleSessionTask)
 	mux.HandleFunc("/api/fax/analyze", s.handleFaxAnalyze)
 	mux.HandleFunc("/api/voice/callback-intro", s.handleCallbackIntro)
+	mux.HandleFunc("/api/config/export", s.handleConfigBundle)
+	mux.HandleFunc("/api/config/import", s.handleConfigBundle)
 	s.handler = s.withAuth(mux)
 	go s.listen()
 	return s

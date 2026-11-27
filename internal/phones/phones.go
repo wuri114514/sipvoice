@@ -50,6 +50,30 @@ func (s *Store) List() []Phone {
 	return phones
 }
 
+// Replace 用给定清单整体替换话机台账（配置导入用）。
+// 与逐条 Upsert 的区别：清单里没有的号码会被删掉，语义是「以导入内容为准」。
+func (s *Store) Replace(list []Phone) error {
+	out := make([]Phone, 0, len(list))
+	seen := map[string]bool{}
+	for _, p := range list {
+		if p.Number == "" {
+			continue
+		}
+		if seen[p.Number] {
+			continue
+		}
+		seen[p.Number] = true
+		if p.Name == "" {
+			p.Name = p.Number
+		}
+		if p.Password == "" {
+			p.Password = "Sip" + p.Number + "Pass"
+		}
+		out = append(out, p)
+	}
+	return s.save(out)
+}
+
 // Upsert 新增或更新一台话机。
 func (s *Store) Upsert(p Phone) error {
 	if p.Number == "" || p.Name == "" {

@@ -713,6 +713,34 @@
         <button class="ghost" id="tls-upload">导入证书</button>
       </div>
     </div>
+    <div class="panel">
+      <h2>配置导入 / 导出</h2>
+      <div class="msg">
+        导出为单个 JSON 包，涵盖：AI 与语音、处理提示音、会话、通知推送、传真、邮局与收信转传真、
+        话机台账、控制台账号。<br>
+        <b>包格式与程序版本无关</b>：老包新程序能直接读；新版本多出来的区段在旧程序上也会原样保留，
+        升级后再导入不会丢。导入前会自动把当前配置备份到 <code>/etc/sipvoice/backups/pre-import-*</code>。
+      </div>
+      <div class="grid">
+        <div class="field"><label>导出是否包含密钥</label>
+          <select id="cb-secrets">
+            <option value="false">不含密钥（推荐，账号密钥留在本机）</option>
+            <option value="true">包含密钥（整机迁移用，注意保管文件）</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <button class="primary" id="cb-export">导出配置包</button>
+        <span class="msg" id="cb-msg"></span>
+      </div>
+      <h3 style="margin-top:16px;font-size:14px">导入配置包</h3>
+      <div class="row">
+        <input type="file" id="cb-file" accept=".json,application/json">
+        <button class="ghost" id="cb-dry">先校验（不写入）</button>
+        <button class="primary" id="cb-import">导入并应用</button>
+      </div>
+      <div class="msg" id="cb-report" style="white-space:pre-wrap"></div>
+    </div>
   </section>
 </main>
 
@@ -1768,6 +1796,62 @@ $('tls-upload').onclick=async()=>{
     $('tls-msg').textContent='导入成功，正在切换…';
     reloadScheme('manual');
   }catch(e){$('tls-msg').textContent=e.message}
+};
+
+// ---- 配置导入 / 导出 ----
+// 包里带密钥时浏览器会直接下载，密钥不经过前端内存，这里只负责触发。
+$('cb-export').onclick=()=>{
+  const withSec=$('cb-secrets').value==='true';
+  if(withSec && !confirm('导出包将包含全部云端密钥明文。\n请确认文件不会外流，确定继续？')) return;
+  $('cb-msg').textContent='正在打包…';
+  location.href='/api/config/export?secrets='+(withSec?'1':'0');
+  setTimeout(()=>{$('cb-msg').textContent='已开始下载'},800);
+};
+
+// 把导入报告渲染成易读的几行
+function renderBundleReport(r){
+  const rep=r.report||{};
+  const lines=[];
+  lines.push(r.message||'');
+  if(rep.dry_run) lines.push('（校验模式，未写入任何文件）');
+  lines.push('');
+  const mark={applied:'✅',skipped:'–',failed:'❌'};
+  for(const s of (rep.sections||[])){
+    let t='  '+(mark[s.status]||'?')+' '+s.name.padEnd(8);
+    if(s.items) t+=' ('+s.items+' 项)';
+    if(s.note) t+='  '+s.note;
+    lines.push(t);
+  }
+  if(rep.backup_dir) lines.push('', '导入前备份: '+rep.backup_dir);
+  for(const w of (rep.warnings||[])) lines.push('⚠️ '+w);
+  return lines.join('\n');
+}
+
+async function postBundle(dryRun){
+  const f=$('cb-file').files[0];
+  if(!f){$('cb-report').textContent='请先选择配置文件';return}
+  $('cb-report').textContent=dryRun?'校验中…':'导入中…';
+  try{
+    const text=await f.text();
+    const url='/api/config/import'+(dryRun?'?dry_run=1':'');
+    const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:text});
+    const j=await r.json();
+    if(!r.ok){$('cb-report').textContent='失败: '+(j.message||r.status);return}
+    $('cb-report').textContent=renderBundleReport(j);
+    if(!dryRun && j.ok){
+      // 配置变了，重新拉一遍面板数据
+      try{ await loadConfig(); }catch(e){}
+      try{ await loadMail(); }catch(e){}
+      try{ await loadPhones(); }catch(e){}
+      try{ await loadFax(); }catch(e){}
+    }
+  }catch(e){$('cb-report').textContent='失败: '+e.message}
+}
+
+$('cb-dry').onclick=()=>postBundle(true);
+$('cb-import').onclick=()=>{
+  if(!confirm('导入会覆盖当前的 AI/语音/传真/邮局/话机等配置。\n导入前会自动备份到 /etc/sipvoice/backups/。\n确定继续？')) return;
+  postBundle(false);
 };
 
 async function refresh(){

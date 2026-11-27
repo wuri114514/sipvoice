@@ -144,10 +144,17 @@ func astCLI(args ...string) (string, error) {
 	return "", lastErr
 }
 
+// DefaultPath 是传真配置的默认路径。
+const DefaultPath = "/etc/sipvoice/fax.json"
+
 // Load 读取传真配置。
-func Load() Config {
+func Load() Config { return LoadFrom(DefaultPath) }
+
+// LoadFrom 从指定路径读取传真配置；文件不存在时返回默认值。
+// 配置导入导出要写别的目录，所以路径必须可传。
+func LoadFrom(path string) Config {
 	cfg := DefaultConfig()
-	raw, err := os.ReadFile("/etc/sipvoice/fax.json")
+	raw, err := os.ReadFile(path)
 	if err == nil {
 		_ = json.Unmarshal(raw, &cfg)
 	}
@@ -156,13 +163,16 @@ func Load() Config {
 }
 
 // Save 保存传真配置。
-func Save(c Config) error {
+func Save(c Config) error { return SaveTo(DefaultPath, c) }
+
+// SaveTo 保存到指定路径。
+func SaveTo(path string, c Config) error {
 	c.Normalize()
 	raw, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile("/etc/sipvoice/fax.json", raw, 0o660)
+	return os.WriteFile(path, raw, 0o660)
 }
 
 // ApplyDialplan 生成传真发送/回拨用的拨号方案并 reload。

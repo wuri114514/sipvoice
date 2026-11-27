@@ -33,7 +33,7 @@ import (
 	"sipvoice/internal/worker"
 )
 
-var version = "2.1.11"
+var version = "2.1.12"
 
 func main() {
 	var (
