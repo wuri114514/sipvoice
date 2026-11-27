@@ -307,6 +307,29 @@ sudo ./upgrade.sh --rollback
 sudo ./upgrade.sh --list
 ```
 
+## 配置导入 / 导出
+
+「系统」→「配置导入 / 导出」可把整机配置打成一个 JSON 包，也能导回来。
+
+```bash
+# 命令行也能直接用
+curl -k -b cookie.txt 'https://127.0.0.1:8080/api/config/export?secrets=0' -o config.json
+curl -k -b cookie.txt -X POST --data-binary @config.json \
+     'https://127.0.0.1:8080/api/config/import?dry_run=1'   # 先校验
+curl -k -b cookie.txt -X POST --data-binary @config.json \
+     'https://127.0.0.1:8080/api/config/import'             # 实际导入
+```
+
+包格式与程序版本**无关**：老包新程序能直接读；新版本多出来的区段在旧程序上
+会被原样保留，升级后再导入不会丢。以后加新功能只需往包里加一个区段。
+
+细节与「新增功能时该怎么做」见 [docs/CONFIG-BUNDLE.md](docs/CONFIG-BUNDLE.md)。
+
+导出默认不含密钥。勾选「包含密钥」时包里是明文，可用于整机迁移，
+但要自行保管文件。
+
+导入前会自动把当前配置备份到 `/etc/sipvoice/backups/pre-import-<时间戳>/`。
+
 ## 运维
 
 ```bash

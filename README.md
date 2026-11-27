@@ -316,6 +316,22 @@ sudo ./upgrade.sh --rollback
 sudo ./upgrade.sh --list
 ```
 
+## Config export / import
+
+**System → Config import / export** packs the whole configuration into one JSON
+file and can load it back.
+
+The bundle format is **independent of the app version**: an old bundle always
+loads into a new build, and sections a build does not know are preserved
+verbatim and carried back on the next export. Adding a feature only means
+adding a new section key. See [docs/CONFIG-BUNDLE.md](docs/CONFIG-BUNDLE.md).
+
+Secrets are excluded by default; tick "include secrets" for full-machine
+migration (the file then contains plaintext keys — keep it safe).
+
+Every import first backs up the current config to
+`/etc/sipvoice/backups/pre-import-<timestamp>/`.
+
 ## Operations
 
 ```bash

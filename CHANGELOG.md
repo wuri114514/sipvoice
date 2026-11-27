@@ -2,6 +2,49 @@
 
 本项目从"电话能打通"一路做到"可发布"，版本号按 **主.次.修订 b构建** 递增。
 
+## v2.1.12 — 配置导入导出（跨版本兼容）+ 系统级备份
+
+### 配置包
+
+原来换机或做实验性改动前，只能手工复制 `/etc/sipvoice/*.json`。
+问题是：不同版本字段不一样，旧文件进新程序会缺字段或多字段；
+新版本多出来的配置被旧程序读到会丢；密钥跟 machine-id 绑定，复制过去解不开。
+
+现在整机配置打成一个 JSON 包，`format` 为 `sipvoice.config-bundle`，
+`format_version` 与程序版本解耦。三条规则：
+
+- **版本无关**：读取端只要求 `format_version <= 本实现版本`，老包永远能进新程序。
+- **向后兼容**：区段可选，缺区段跳过、缺字段用默认值补。
+- **向前兼容**：不认识的区段不报错也不丢弃，原样存进
+  `config-bundle.extra.json` 旁挂，下次导出自动并回，往返无损。
+
+于是以后加新功能只要往 `sections` 加一个 key，旧程序照样能搬运配置。
+约定写在 `docs/CONFIG-BUNDLE.md`。
+
+安全行为：导出默认不含密钥；导入前自动备份到 `backups/pre-import-*`；
+单区段失败不影响其它区段；已有账号不覆盖；密钥导入后按本机重新加密。
+
+面板：「系统」→「配置导入 / 导出」，可导出、先校验、导入并应用，
+报告按区段列出 applied/skipped/failed。
+
+### 系统级备份工具
+
+`deploy/sipvoice-backup.sh` 装到 `/usr/local/bin/sipvoice-backup`：
+
+```
+sipvoice-backup config        配置级（约 13MB / 5 秒）
+sipvoice-backup full          全盘（约 2GB，含 /usr /etc /opt /root /data）
+sipvoice-backup list|verify|prune [N]
+```
+
+产物落 `/data/backups/`，附 `.sha256` 与 `.manifest`（版本、手动安装包列表、
+磁盘占用）。全盘备份排除虚拟文件系统、缓存、snapd、journal、ASR 模型与备份自身。
+
+### 顺带
+
+- `fax` 包新增 `LoadFrom` / `SaveTo`，传真配置可写到任意目录。
+- `phones.Store` 新增 `Replace`：整体替换台账（导入语义）。
+
 ## v2.1.1 — 修复「邮局设置保存后不生效」
 
 现象：在「邮局设置」里填好 SMTP / IMAP，点保存或点测试，刷新后配置没了。
