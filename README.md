@@ -85,7 +85,8 @@ Then dial:
 | `600` | Receive a fax |
 | `1001` / `1002` | Test extensions (passwords `SipVoice1001` / `SipVoice1002`) |
 
-> Change the default extension passwords right after the first login (Console → Phones).
+> **Security:** change the default extension passwords right after the first login (Console → Phones).
+> These defaults (`SipVoice1001` / `SipVoice1002`) are published in the repository and the shipped Asterisk baseline, so **never expose the service to the public internet with them unchanged**. Keeping your own passwords safe is the operator's responsibility.
 
 ## Screenshots
 
