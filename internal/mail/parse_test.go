@@ -193,19 +193,19 @@ func TestParseMessageOctetStreamImage(t *testing.T) {
 // 头部常见形态是 "=?utf-8?B?...?=" <a@b.com>，直接比原始字符串会永远匹配不上白名单。
 func TestBriefHeaderDecodesSender(t *testing.T) {
 	raw := strings.Join([]string{
-		`From: "=?ISO-8859-1?B?V3VSaQ==?=" <wuri@example.com>`,
+		`From: "=?ISO-8859-1?B?QWxpY2U=?=" <alice@example.com>`,
 		"Subject: [FAX]",
 		"",
 		"",
 	}, "\r\n")
 	subj, from := briefHeader([]byte(raw))
-	if from != "wuri@example.com" {
-		t.Errorf("发件人 = %q，期望 wuri@example.com", from)
+	if from != "alice@example.com" {
+		t.Errorf("发件人 = %q，期望 alice@example.com", from)
 	}
 	if subj != "[FAX]" {
 		t.Errorf("主题 = %q", subj)
 	}
-	cfg := ReceiveConfig{FromAllow: []string{"wuri@example.com"}, SubjectTag: "[FAX]"}
+	cfg := ReceiveConfig{FromAllow: []string{"alice@example.com"}, SubjectTag: "[FAX]"}
 	if !cfg.SubjectIsFax(subj) {
 		t.Error("主题判定应命中")
 	}
